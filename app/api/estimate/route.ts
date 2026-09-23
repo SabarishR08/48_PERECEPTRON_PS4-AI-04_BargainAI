@@ -3,6 +3,7 @@ import { identifyItemFromImage, generatePriceEstimate } from '@/lib/gemini';
 import { queryPriceBands, determineLocalityTier, getSeasonalMultiplier } from '@/lib/supabase';
 import { ItemCategory, ItemCondition, LocalityTier, UserRole } from '@/lib/types';
 
+export const dynamic = 'force-dynamic';
 export const maxDuration = 30; // 30s timeout for Vercel
 
 export async function POST(req: NextRequest) {
@@ -24,13 +25,12 @@ export async function POST(req: NextRequest) {
     let detectedCondition: ItemCondition = 'fair';
     let visionConfidence: 'high' | 'medium' | 'low' = 'high';
 
-    // Step 1: Process photo with Gemini Vision if provided
-    if (itemPhoto) {
+    // Step 1: Process photo with Gemini Vision ONLY if item name was not provided
+    // (Client-side /api/identify-item already identifies the photo; avoid duplicate expensive vision calls)
+    if (itemPhoto && !detectedName) {
       const visionResult = await identifyItemFromImage(itemPhoto);
       if (visionResult) {
-        if (!detectedName || visionResult.confidence === 'high') {
-          detectedName = visionResult.identifiedItem || detectedName;
-        }
+        detectedName = visionResult.identifiedItem || detectedName;
         if (visionResult.category !== 'unknown') {
           detectedCategory = visionResult.category as ItemCategory;
         }
@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
     if (detectedCategory === 'unknown' && detectedName) {
       const lower = detectedName.toLowerCase();
       // Exclude false friends like 'vegetable oil' or 'cloth bag'
-      const isProduce = /\b(tomato|tomatoes|onion|onions|potato|potatoes|banana|bananas|apple|apples|spinach|palak|sabzi|chilli|chillies|ginger|adrak|mango|mangoes)\b/i.test(lower);
+      const isProduce = /\b(tomato|tomatoes|onion|onions|potato|potatoes|banana|bananas|apple|apples|spinach|palak|sabzi|chilli|chillies|ginger|adrak|mango|mangoes|carrot|carrots|gajar|mooli|radish|cauliflower|gobi|cabbage|bhindi|okra|ladyfinger|brinjal|eggplant|baingan|cucumber|khira|lemon|nimbu|garlic|lahsun|coriander|dhaniya|fruit|vegetable)\b/i.test(lower);
       const isElectronics = /\b(cable|charger|charging|earphone|earphones|headphone|headphones|case|cover|tempered glass|usb|type-c|adapter|neckband|otg)\b/i.test(lower);
       const isApparel = /\b(t-shirt|tshirt|shirt|kurti|kurtis|jeans|denim|pant|pants|dupatta|socks|belt|trouser|trousers|jogger|joggers|handkerchief)\b/i.test(lower);
 

@@ -21,6 +21,10 @@ export const SEEDED_PRICE_BANDS: PriceBand[] = [
   { category: 'produce', item_name: 'Green Chillies', base_min_price: 40, base_max_price: 70, unit: 'kg', locality_tier: 'tier2_city', locality_multiplier: 1.0 },
   { category: 'produce', item_name: 'Ginger (Adrak)', base_min_price: 80, base_max_price: 130, unit: 'kg', locality_tier: 'tier2_city', locality_multiplier: 1.0 },
   { category: 'produce', item_name: 'Mangoes (Alphonso/Banganapalli)', base_min_price: 90, base_max_price: 160, unit: 'kg', locality_tier: 'tier2_city', locality_multiplier: 1.0 },
+  { category: 'produce', item_name: 'Carrots (Red / Orange Gajar)', base_min_price: 30, base_max_price: 55, unit: 'kg', locality_tier: 'tier2_city', locality_multiplier: 1.0 },
+  { category: 'produce', item_name: 'Carrots (Red / Orange Gajar)', base_min_price: 40, base_max_price: 70, unit: 'kg', locality_tier: 'tier1_metro', locality_multiplier: 1.25 },
+  { category: 'produce', item_name: 'Carrots (Red / Orange Gajar)', base_min_price: 25, base_max_price: 45, unit: 'kg', locality_tier: 'rural', locality_multiplier: 0.8 },
+  { category: 'produce', item_name: 'Cauliflower (Phool Gobi)', base_min_price: 25, base_max_price: 45, unit: 'kg', locality_tier: 'tier2_city', locality_multiplier: 1.0 },
 
   // Electronics
   { category: 'electronics', item_name: 'USB-C Fast Charging Cable (1m/Braided)', base_min_price: 100, base_max_price: 220, unit: 'piece', locality_tier: 'tier2_city', locality_multiplier: 1.0 },

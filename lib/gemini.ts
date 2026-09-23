@@ -89,31 +89,33 @@ async function executeWithModelFallback<T>(
   genAI: GoogleGenerativeAI,
   operation: (modelName: string) => Promise<T>
 ): Promise<T> {
-  const models = await resolveWorkingModels();
-  let lastError: any = null;
+  // Fast path: Try primary model immediately without waiting for ListModels network call
+  const primary = cachedWorkingModel || DEFAULT_GEMINI_MODEL;
+  try {
+    const result = await operation(primary);
+    cachedWorkingModel = primary;
+    return result;
+  } catch (err: any) {
+    const errMsg = err?.message || String(err);
+    console.warn(`Primary model "${primary}" failed (${errMsg}). Resolving candidate fallback models...`);
 
-  for (const modelName of models) {
-    try {
-      const result = await operation(modelName);
-      cachedWorkingModel = modelName;
-      return result;
-    } catch (err: any) {
-      lastError = err;
-      const errMsg = err?.message || String(err);
-      if (
-        errMsg.includes('404') || 
-        errMsg.includes('not found') || 
-        errMsg.includes('not supported') ||
-        errMsg.includes('is not found for API version')
-      ) {
-        console.warn(`Gemini model "${modelName}" returned 404/not supported. Trying next model candidate...`);
-        continue;
+    const models = await resolveWorkingModels();
+    let lastError: any = err;
+
+    for (const modelName of models) {
+      if (modelName === primary) continue;
+      try {
+        const result = await operation(modelName);
+        cachedWorkingModel = modelName;
+        return result;
+      } catch (fallbackErr: any) {
+        lastError = fallbackErr;
+        console.warn(`Fallback model "${modelName}" failed: ${fallbackErr?.message || fallbackErr}`);
       }
-      console.warn(`Gemini model "${modelName}" error: ${errMsg}. Trying fallback model...`);
     }
-  }
 
-  throw lastError || new Error('All candidate Gemini models failed.');
+    throw lastError || new Error('All candidate Gemini models failed.');
+  }
 }
 
 /**

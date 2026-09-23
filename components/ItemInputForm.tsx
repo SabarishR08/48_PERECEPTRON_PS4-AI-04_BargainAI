@@ -80,17 +80,19 @@ export default function ItemInputForm({ onSubmit, isLoading }: ItemInputFormProp
 
   const handleVisionAnalysisComplete = (result: VisionIdentificationResult) => {
     setVisionData(result);
-    if (result.identifiedItem && !itemText && !result.identifiedItem.toLowerCase().includes('unrecognized') && !result.identifiedItem.toLowerCase().includes('unidentified')) {
+    if (result.identifiedItem && !result.identifiedItem.toLowerCase().includes('unrecognized') && !result.identifiedItem.toLowerCase().includes('unidentified')) {
       setItemText(result.identifiedItem);
     }
-    if (result.category !== 'unknown') {
+    if (result.category && result.category !== 'unknown') {
       setSelectedCategory(result.category as ItemCategory);
     }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!itemText && !photoBase64) {
+    const effectiveText = itemText.trim() || (visionData?.identifiedItem && !visionData.identifiedItem.toLowerCase().includes('unrecognized') && !visionData.identifiedItem.toLowerCase().includes('unidentified') ? visionData.identifiedItem : '');
+
+    if (!effectiveText && !photoBase64) {
       alert('Please enter an item name or take a photo.');
       return;
     }
@@ -107,12 +109,15 @@ export default function ItemInputForm({ onSubmit, isLoading }: ItemInputFormProp
           tier: selectedLocation.tier
         };
 
+    const effectiveCategory = (selectedCategory || (visionData?.category !== 'unknown' ? visionData?.category : undefined)) as ItemCategory | undefined;
+
     onSubmit({
-      itemText,
-      itemPhoto: photoBase64,
+      itemText: effectiveText,
+      // If item text is already identified, avoid re-transmitting the huge photo payload to /api/estimate to prevent 504 timeout
+      itemPhoto: effectiveText ? null : photoBase64,
       role,
       location: locationData,
-      categoryHint: selectedCategory ? (selectedCategory as ItemCategory) : undefined
+      categoryHint: effectiveCategory
     });
   };
 
