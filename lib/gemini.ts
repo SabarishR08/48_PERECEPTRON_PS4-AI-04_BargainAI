@@ -43,10 +43,9 @@ export const DEFAULT_GEMINI_MODEL = (envModel && !DEPRECATED_MODELS.has(envModel
 const FALLBACK_MODEL_CANDIDATES = [
   DEFAULT_GEMINI_MODEL,
   'gemini-3.6-flash',
+  'gemini-2.5-flash-lite',
   'gemini-3.5-flash',
   'gemini-3.7-flash',
-  'gemini-3.8-flash',
-  'gemini-2.5-flash-lite',
   'gemini-2.5-pro'
 ].filter((m, i, arr) => m && !DEPRECATED_MODELS.has(m) && arr.indexOf(m) === i) as string[];
 
@@ -230,7 +229,8 @@ export async function identifyItemFromImage(
             },
             required: ['identifiedItem', 'category', 'condition', 'confidence', 'suggestedUnit', 'visualObservations']
           } as any,
-          temperature: 0.2
+          temperature: 0.2,
+          maxOutputTokens: 300
         },
         systemInstruction: VISION_IDENTIFICATION_SYSTEM_PROMPT
       });
@@ -455,7 +455,8 @@ TASK:
             },
             required: ['priceRange', 'confidence', 'reasoning', 'negotiationTips', 'playbook']
           } as any,
-          temperature: 0.3
+          temperature: 0.3,
+          maxOutputTokens: 600
         },
         systemInstruction: getPriceEstimationSystemPrompt(role)
       });
@@ -463,7 +464,7 @@ TASK:
       const result = await model.generateContent(promptInput);
       const text = result.response.text();
       return parseGeminiJsonResponse<any>(text);
-    }, 6500);
+    }, 8000);
 
     return {
       success: true,
