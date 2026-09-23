@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { PriceBand, ItemCategory, LocalityTier } from './types';
+import { PriceBand, ItemCategory, LocalityTier, SeasonalHistoryPoint, QualityGrade } from './types';
 
 // Baseline reference dataset matching supabase/seed.sql
 // Used as fallback if Supabase credentials are not provided or during local offline testing
@@ -150,7 +150,6 @@ export function determineLocalityTier(cityOrLocality: string): { tier: LocalityT
 
   return { tier: 'tier2_city', multiplier: 1.00 };
 }
-
 /**
  * Determine seasonal pricing factor based on commodity and calendar month
  * Month is 1-indexed (1 = Jan, 9 = Sept, etc.)
@@ -250,6 +249,170 @@ export function getSeasonalMultiplier(
     multiplier: 1.00,
     impactLabel: 'Neutral season factor',
     reason: 'Standard seasonal supply and steady consumer retail demand in regional mandis.'
+  };
+}
+
+// ── Seasonal price history ───────────────────────────────────────────────────
+
+// Quality multipliers applied on top of the baseline avg_price
+const QUALITY_MULTIPLIERS: Record<QualityGrade, number> = {
+  excellent: 1.15,
+  good: 1.00,
+  fair: 0.85,
+  poor: 0.65,
+};
+
+// Month labels for electronics/apparel (month-based)
+const MONTH_LABELS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+// Season labels for produce
+const SEASON_LABELS = ['Summer','Monsoon','Post-Monsoon','Winter'];
+
+/**
+ * Generates a full 12-period seasonal curve for a produce item.
+ * Swings are tied to real Indian harvest/supply patterns.
+ */
+function produceSeasonalCurve(itemName: string, baseAvg: number): number[] {
+  const name = itemName.toLowerCase();
+  // Each index = month 0..11, value = multiplier on baseAvg
+  if (name.includes('tomato')) {
+    // High in summer (peak demand, low supply), low post-monsoon harvest
+    return [1.3,1.4,1.5,1.6,1.5,1.2,0.9,0.8,0.75,0.85,1.0,1.1];
+  }
+  if (name.includes('onion')) {
+    // Classic: spikes pre-monsoon/early summer, crashes after rabi harvest
+    return [1.1,1.0,1.0,1.2,1.5,1.6,1.3,0.9,0.8,0.75,0.85,1.0];
+  }
+  if (name.includes('potato')) {
+    // Stable; slight rise summer, falls after Feb harvest
+    return [0.85,0.8,0.9,1.0,1.1,1.1,1.0,0.95,0.9,0.85,0.9,0.9];
+  }
+  if (name.includes('mango')) {
+    // Peak Apr-Jun (season), nearly zero rest of year → proxy to high off-season
+    return [1.8,1.8,1.5,0.9,0.75,0.8,1.2,1.8,1.9,2.0,2.0,1.9];
+  }
+  if (name.includes('banana')) {
+    // Fairly stable, mild dip in monsoon
+    return [1.0,1.0,0.95,0.95,1.05,1.1,1.05,0.9,0.9,1.0,1.05,1.05];
+  }
+  if (name.includes('apple')) {
+    // Peak Sep-Nov (Shimla harvest), high in summer (storage)
+    return [1.2,1.3,1.3,1.4,1.4,1.3,1.1,0.9,0.8,0.85,1.0,1.1];
+  }
+  if (name.includes('spinach') || name.includes('palak')) {
+    // Abundant in winter, scarce in summer
+    return [0.8,0.8,0.9,1.1,1.3,1.4,1.3,1.2,1.1,0.9,0.8,0.75];
+  }
+  if (name.includes('chilli') || name.includes('ginger')) {
+    return [1.0,0.95,0.95,1.1,1.3,1.4,1.2,1.0,0.9,0.9,0.95,1.0];
+  }
+  // Generic produce fallback
+  return [1.0,1.0,1.05,1.1,1.2,1.2,1.1,0.95,0.9,0.9,0.95,1.0];
+}
+
+/**
+ * Generates a 12-month curve for electronics/apparel.
+ * Mostly flat with dips after Diwali/end-of-year sale seasons.
+ */
+function flatSeasonalCurve(itemName: string, baseAvg: number): number[] {
+  const name = itemName.toLowerCase();
+  // Apparel dips in post-season sale (Jan, Jul-Aug)
+  if (['t-shirt','kurti','jeans','jogger','track','belt','socks','dupatta','handkerchief'].some(k => name.includes(k))) {
+    return [0.88,0.92,0.97,1.0,1.0,1.02,0.9,0.88,0.95,1.02,1.08,1.05];
+  }
+  // Electronics: Diwali Oct/Nov bump, Jan post-sale dip
+  return [0.92,0.93,0.95,0.97,0.98,0.98,0.97,0.97,0.99,1.05,1.08,1.0];
+}
+
+/**
+ * Build seeded seasonal history for a given item+tier+year.
+ * Returns one row per month (Jan-Dec), quality = 'good' (the dominant baseline grade).
+ */
+export function buildSeededSeasonalHistory(
+  itemName: string,
+  category: ItemCategory,
+  baseAvg: number,
+  tier: LocalityTier,
+  year: number = new Date().getFullYear()
+): SeasonalHistoryPoint[] {
+  const tierMult = tier === 'tier1_metro' ? 1.25 : tier === 'rural' ? 0.80 : 1.0;
+  
+  // Apply a synthetic inflation/deflation factor of ~5% per year from 2026
+  const baseYear = 2026;
+  const yearDiff = year - baseYear;
+  const inflationFactor = Math.pow(1.05, yearDiff);
+  
+  const adjustedBase = baseAvg * tierMult * inflationFactor;
+
+  const curve = category === 'produce'
+    ? produceSeasonalCurve(itemName, adjustedBase)
+    : flatSeasonalCurve(itemName, adjustedBase);
+
+  return MONTH_LABELS.map((label, i) => ({
+    period: label,
+    monthIndex: i,
+    avgPrice: Math.round(adjustedBase * curve[i]),
+    qualityGrade: 'good' as QualityGrade,
+    sampleSize: 18 + Math.round(Math.random() * 24),
+  }));
+}
+
+
+/**
+ * Query seasonal history from Supabase, with seeded fallback.
+ */
+export async function querySeasonalHistory(
+  itemName: string,
+  category: ItemCategory,
+  tier: LocalityTier,
+  year: number = new Date().getFullYear()
+): Promise<{ history: SeasonalHistoryPoint[]; source: 'supabase' | 'seeded_baseline' }> {
+  const supabase = getSupabase();
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('seasonal_price_history')
+        .select('*')
+        .ilike('item_name', `%${itemName.split(' ')[0]}%`)
+        .eq('category', category)
+        .eq('locality_tier', tier)
+        .eq('quality_grade', 'good')
+        // if there's a year column we would add .eq('year', year), assuming year is not there
+        .order('month', { ascending: true });
+
+      if (!error && data && data.length >= 4) {
+        const history: SeasonalHistoryPoint[] = data.map((row: any) => ({
+          period: MONTH_LABELS[row.month - 1] ?? String(row.month),
+          monthIndex: row.month - 1,
+          avgPrice: row.avg_price,
+          qualityGrade: row.quality_grade as QualityGrade,
+          sampleSize: row.sample_size,
+        }));
+        return { history, source: 'supabase' };
+      }
+    } catch (e) {
+      console.warn('Supabase seasonal query error, falling back:', e);
+    }
+  }
+
+  // Seeded fallback — derive base avg from SEEDED_PRICE_BANDS
+  const matchingBand = SEEDED_PRICE_BANDS.find(
+    b => b.item_name.toLowerCase().includes(itemName.toLowerCase().split(' ')[0]) &&
+         b.category === category &&
+         b.locality_tier === tier
+  ) ?? SEEDED_PRICE_BANDS.find(
+    b => b.item_name.toLowerCase().includes(itemName.toLowerCase().split(' ')[0]) &&
+         b.category === category
+  );
+
+  const baseAvg = matchingBand
+    ? (matchingBand.base_min_price + matchingBand.base_max_price) / 2
+    : 100;
+
+  return {
+    history: buildSeededSeasonalHistory(itemName, category, baseAvg, tier, year),
+    source: 'seeded_baseline',
   };
 }
 

@@ -7,10 +7,12 @@ import {
   ItemCondition,
   UserRole,
   SeasonalFactor,
-  PriceBand 
+  PriceBand,
+  TrendDirection
 } from './types';
 import { VISION_IDENTIFICATION_SYSTEM_PROMPT } from './prompts/vision';
 import { getPriceEstimationSystemPrompt, PRICE_ESTIMATION_JSON_SCHEMA } from './prompts/pricing';
+import { SEASONAL_INSIGHT_SYSTEM_PROMPT } from './prompts/seasonal';
 
 function getGeminiClient(): GoogleGenerativeAI | null {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -382,4 +384,51 @@ TASK:
       disclaimer: 'Estimate based on category pricing patterns, not live market data'
     };
   }
+}
+
+/**
+ * Generate a one-sentence plain-English seasonal insight using Gemini.
+ * Gemini only explains pre-computed numbers — it never invents them.
+ * Throws on failure so callers can apply their own fallback.
+ */
+export async function generateSeasonalInsight(params: {
+  itemName: string;
+  category: ItemCategory;
+  currentPeriod: string;
+  currentPrice: number;
+  historicalLow: number;
+  historicalHigh: number;
+  trend: TrendDirection;
+}): Promise<string> {
+  const genAI = getGeminiClient();
+  if (!genAI) throw new Error('Gemini API key not configured');
+
+  const { itemName, category, currentPeriod, currentPrice, historicalLow, historicalHigh, trend } = params;
+
+  const prompt = `Item: "${itemName}" (${category})
+Current period: ${currentPeriod}, Current average price: ₹${currentPrice}
+Historical low: ₹${historicalLow}, Historical high: ₹${historicalHigh}
+Price trend: ${trend}
+
+Output strict JSON: { "insight": "<one sentence, max 30 words, explaining WHY this seasonal pattern happens>" }`;
+
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-1.5-flash',
+    generationConfig: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: SchemaType.OBJECT,
+        properties: { insight: { type: SchemaType.STRING } },
+        required: ['insight'],
+      } as any,
+      temperature: 0.4,
+      maxOutputTokens: 80,
+    },
+    systemInstruction: SEASONAL_INSIGHT_SYSTEM_PROMPT,
+  });
+
+  const result = await model.generateContent(prompt);
+  const text = result.response.text();
+  const parsed = JSON.parse(text);
+  return parsed.insight as string;
 }
