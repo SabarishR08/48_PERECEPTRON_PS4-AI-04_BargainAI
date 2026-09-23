@@ -79,24 +79,24 @@ export default function ImageUploader({
       {!preview ? (
         <div
           onClick={() => fileInputRef.current?.click()}
-          className="border-2 border-dashed border-slate-300 hover:border-emerald-500 hover:bg-emerald-50/40 transition-all duration-200 rounded-2xl p-6 flex flex-col items-center justify-center cursor-pointer text-center group bg-white shadow-xs"
+          className="border-2 border-dashed border-[#2A2A2D] hover:border-[#C0C0C6] hover:bg-[#151517] transition-all duration-200 rounded-2xl p-6 flex flex-col items-center justify-center cursor-pointer text-center group bg-[#0D0D0F]"
         >
-          <div className="w-14 h-14 rounded-full bg-emerald-50 group-hover:bg-emerald-100 flex items-center justify-center mb-3 transition-colors text-emerald-600">
+          <div className="w-14 h-14 rounded-full bg-[#1C1C1F] group-hover:bg-[#2A2A2D] flex items-center justify-center mb-3 transition-colors text-[#C0C0C6]">
             <Camera className="w-7 h-7" />
           </div>
-          <p className="text-sm font-semibold text-slate-800 mb-1">
+          <p className="text-sm font-semibold text-[#E8E8EA] mb-1">
             Photograph or Upload Item
           </p>
-          <p className="text-xs text-slate-500 max-w-xs">
-            Snap a photo of the item at the stall or upload an image. Gemini Vision will identify condition & quality.
+          <p className="text-xs text-[#9A9A9E] max-w-xs">
+            Snap a photo of the item at the stall or upload an image. Multimodal Gemini Vision will identify category, variety &amp; condition.
           </p>
-          <div className="mt-3 flex items-center gap-2 text-xs font-medium text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-200">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Multimodal Vision Auto-Detection</span>
+          <div className="mt-3 flex items-center gap-2 text-xs font-medium text-[#C0C0C6] bg-[#1C1C1F] px-3 py-1.5 rounded-full border border-[#2A2A2D]">
+            <Sparkles className="w-3.5 h-3.5 text-[#C0C0C6]" />
+            <span>Multimodal Gemini Vision Auto-Detection</span>
           </div>
         </div>
       ) : (
-        <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-900 group shadow-sm">
+        <div className="relative rounded-2xl overflow-hidden border border-[#2A2A2D] bg-[#0A0A0B] group shadow-sm">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={preview}
@@ -106,23 +106,23 @@ export default function ImageUploader({
           <button
             onClick={handleClear}
             type="button"
-            className="absolute top-3 right-3 bg-slate-900/80 hover:bg-red-600 text-white p-1.5 rounded-full backdrop-blur-xs transition-colors shadow-md"
+            className="absolute top-3 right-3 bg-[#0A0A0B]/80 hover:bg-red-600 text-white p-1.5 rounded-full backdrop-blur-xs transition-colors shadow-md border border-[#2A2A2D]"
             title="Remove image"
           >
             <X className="w-4 h-4" />
           </button>
 
           {(isProcessing || isAnalyzing) && (
-            <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-xs flex flex-col items-center justify-center text-white p-4">
-              <Loader2 className="w-7 h-7 animate-spin text-emerald-400 mb-2" />
-              <p className="text-xs font-medium tracking-wide">
+            <div className="absolute inset-0 bg-[#0A0A0B]/80 backdrop-blur-xs flex flex-col items-center justify-center text-white p-4">
+              <Loader2 className="w-7 h-7 animate-spin text-[#C0C0C6] mb-2" />
+              <p className="text-xs font-medium tracking-wide text-[#E8E8EA]">
                 Analyzing item features with Gemini Vision...
               </p>
             </div>
           )}
 
-          <div className="absolute bottom-2 left-2 bg-slate-900/85 text-slate-200 text-xs px-2.5 py-1 rounded-md backdrop-blur-xs flex items-center gap-1.5">
-            <Upload className="w-3 h-3 text-emerald-400" />
+          <div className="absolute bottom-2 left-2 bg-[#0A0A0B]/85 text-[#E8E8EA] text-xs px-2.5 py-1 rounded-md backdrop-blur-xs flex items-center gap-1.5 border border-[#2A2A2D]">
+            <Upload className="w-3 h-3 text-[#4ADE80]" />
             <span>Photo loaded</span>
           </div>
         </div>

@@ -67,7 +67,7 @@ export interface EstimateResponse {
   condition: ItemCondition;
   localityTier: LocalityTier;
   location: string;
-  seasonalFactor?: SeasonalFactor;
+  seasonalFactor?: SeasonalFactor | null;
   referenceData?: {
     source: 'supabase' | 'seeded_baseline';
     baselineMin: number;

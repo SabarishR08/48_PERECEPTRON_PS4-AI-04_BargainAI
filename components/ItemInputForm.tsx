@@ -80,7 +80,7 @@ export default function ItemInputForm({ onSubmit, isLoading }: ItemInputFormProp
 
   const handleVisionAnalysisComplete = (result: VisionIdentificationResult) => {
     setVisionData(result);
-    if (result.identifiedItem && !itemText) {
+    if (result.identifiedItem && !itemText && !result.identifiedItem.toLowerCase().includes('unrecognized') && !result.identifiedItem.toLowerCase().includes('unidentified')) {
       setItemText(result.identifiedItem);
     }
     if (result.category !== 'unknown') {
@@ -173,12 +173,20 @@ export default function ItemInputForm({ onSubmit, isLoading }: ItemInputFormProp
             onAnalysisComplete={handleVisionAnalysisComplete}
           />
           {visionData && (
-            <div className="mt-3 p-3 bg-[#4ADE80]/10 rounded-xl border border-[#4ADE80]/25 text-xs text-[#4ADE80] flex items-start gap-2">
-              <Sparkles className="w-4 h-4 text-[#4ADE80] shrink-0 mt-0.5" />
+            <div className={`mt-3 p-3 rounded-xl border text-xs flex items-start gap-2 ${
+              visionData.category !== 'unknown'
+                ? 'bg-[#4ADE80]/10 border-[#4ADE80]/25 text-[#4ADE80]'
+                : 'bg-amber-500/10 border-amber-500/25 text-amber-300'
+            }`}>
+              <Sparkles className="w-4 h-4 shrink-0 mt-0.5" />
               <div>
-                <span className="font-semibold text-[#E8E8EA]">Gemini Vision Detected: </span>
-                <span className="text-[#E8E8EA]">{visionData.identifiedItem} (Category: {visionData.category}, Condition: {visionData.condition}).</span>
-                <p className="mt-0.5 text-[#4ADE80]/80 italic">{visionData.visualObservations}</p>
+                <span className="font-semibold text-[#E8E8EA]">
+                  {visionData.category !== 'unknown' ? 'Gemini Vision Detected: ' : 'Vision Note: '}
+                </span>
+                <span className="text-[#E8E8EA]">
+                  {visionData.identifiedItem} {visionData.category !== 'unknown' ? `(Category: ${visionData.category}, Condition: ${visionData.condition})` : ''}
+                </span>
+                <p className="mt-0.5 opacity-80 italic">{visionData.visualObservations}</p>
               </div>
             </div>
           )}

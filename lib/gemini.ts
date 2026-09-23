@@ -11,7 +11,7 @@ import {
   TrendDirection
 } from './types';
 import { VISION_IDENTIFICATION_SYSTEM_PROMPT } from './prompts/vision';
-import { getPriceEstimationSystemPrompt, PRICE_ESTIMATION_JSON_SCHEMA } from './prompts/pricing';
+import { getPriceEstimationSystemPrompt } from './prompts/pricing';
 import { SEASONAL_INSIGHT_SYSTEM_PROMPT } from './prompts/seasonal';
 
 function getGeminiClient(): GoogleGenerativeAI | null {
@@ -22,8 +22,106 @@ function getGeminiClient(): GoogleGenerativeAI | null {
   return new GoogleGenerativeAI(apiKey);
 }
 
+// Memory cache for the discovered working model to avoid repeated queries
+let cachedWorkingModel: string | null = null;
+
+// Candidate list prioritized for performance, vision capability, and current availability
+const FALLBACK_MODEL_CANDIDATES = [
+  process.env.GEMINI_MODEL,
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash-latest',
+  'gemini-1.5-flash',
+  'gemini-2.5-pro',
+  'gemini-1.5-pro',
+  'gemini-pro'
+].filter(Boolean) as string[];
+
 /**
- * Identify item from image base64 using Gemini Vision
+ * Discovers available models for this specific API key via ListModels
+ */
+async function resolveWorkingModels(): Promise<string[]> {
+  if (cachedWorkingModel) {
+    return [cachedWorkingModel, ...FALLBACK_MODEL_CANDIDATES.filter(m => m !== cachedWorkingModel)];
+  }
+
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (apiKey && apiKey !== 'your_gemini_api_key_here') {
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+      if (res.ok) {
+        const data = await res.json();
+        const available = (data.models || [])
+          .filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
+          .map((m: any) => m.name.replace(/^models\//, ''));
+
+        // Match against preferred candidate order
+        for (const candidate of FALLBACK_MODEL_CANDIDATES) {
+          if (available.includes(candidate)) {
+            cachedWorkingModel = candidate;
+            return [candidate, ...available.filter((m: string) => m !== candidate)];
+          }
+        }
+        if (available.length > 0) {
+          cachedWorkingModel = available[0];
+          return available;
+        }
+      }
+    } catch (e) {
+      console.warn('Could not query dynamic Gemini model list, using candidate chain:', e);
+    }
+  }
+
+  return FALLBACK_MODEL_CANDIDATES;
+}
+
+/**
+ * Executes a Gemini operation with automatic model fallback across candidate versions
+ */
+async function executeWithModelFallback<T>(
+  genAI: GoogleGenerativeAI,
+  operation: (modelName: string) => Promise<T>
+): Promise<T> {
+  const models = await resolveWorkingModels();
+  let lastError: any = null;
+
+  for (const modelName of models) {
+    try {
+      const result = await operation(modelName);
+      cachedWorkingModel = modelName;
+      return result;
+    } catch (err: any) {
+      lastError = err;
+      const errMsg = err?.message || String(err);
+      if (
+        errMsg.includes('404') || 
+        errMsg.includes('not found') || 
+        errMsg.includes('not supported') ||
+        errMsg.includes('is not found for API version')
+      ) {
+        console.warn(`Gemini model "${modelName}" returned 404/not supported. Trying next model candidate...`);
+        continue;
+      }
+      console.warn(`Gemini model "${modelName}" error: ${errMsg}. Trying fallback model...`);
+    }
+  }
+
+  throw lastError || new Error('All candidate Gemini models failed.');
+}
+
+/**
+ * Clean and robust JSON parsing for Gemini text responses (strips markdown code blocks)
+ */
+function parseGeminiJsonResponse<T>(text: string): T {
+  let cleaned = text.trim();
+  if (cleaned.startsWith('```')) {
+    cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+  }
+  return JSON.parse(cleaned) as T;
+}
+
+/**
+ * Identify item from image base64 using Gemini Vision with dynamic model fallback
  */
 export async function identifyItemFromImage(
   imageBase64: string,
@@ -42,64 +140,70 @@ export async function identifyItemFromImage(
     };
   }
 
-  // Clean data URL prefix if present
-  const base64Data = imageBase64.replace(/^data:image\/[a-zA-Z]+;base64,/, '');
+  // Extract actual MIME type from data URL if present
+  let effectiveMime = mimeType;
+  const mimeMatch = imageBase64.match(/^data:([^;]+);base64,/);
+  if (mimeMatch) {
+    effectiveMime = mimeMatch[1];
+  }
+  const base64Data = imageBase64.replace(/^data:[^;]+;base64,/, '');
 
   try {
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-1.5-flash',
-      generationConfig: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: SchemaType.OBJECT,
-          properties: {
-            identifiedItem: { type: SchemaType.STRING },
-            category: { 
-              type: SchemaType.STRING, 
-              format: 'enum',
-              enum: ['produce', 'electronics', 'apparel', 'unknown'] 
+    return await executeWithModelFallback(genAI, async (modelName) => {
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: SchemaType.OBJECT,
+            properties: {
+              identifiedItem: { type: SchemaType.STRING },
+              category: { 
+                type: SchemaType.STRING, 
+                format: 'enum',
+                enum: ['produce', 'electronics', 'apparel', 'unknown'] 
+              },
+              condition: { 
+                type: SchemaType.STRING, 
+                format: 'enum',
+                enum: ['new', 'used', 'damaged', 'fresh', 'fair'] 
+              },
+              confidence: { 
+                type: SchemaType.STRING, 
+                format: 'enum',
+                enum: ['high', 'medium', 'low'] 
+              },
+              suggestedUnit: { type: SchemaType.STRING },
+              visualObservations: { type: SchemaType.STRING }
             },
-            condition: { 
-              type: SchemaType.STRING, 
-              format: 'enum',
-              enum: ['new', 'used', 'damaged', 'fresh', 'fair'] 
-            },
-            confidence: { 
-              type: SchemaType.STRING, 
-              format: 'enum',
-              enum: ['high', 'medium', 'low'] 
-            },
-            suggestedUnit: { type: SchemaType.STRING },
-            visualObservations: { type: SchemaType.STRING }
-          },
-          required: ['identifiedItem', 'category', 'condition', 'confidence', 'suggestedUnit', 'visualObservations']
-        } as any,
-        temperature: 0.2
-      },
-      systemInstruction: VISION_IDENTIFICATION_SYSTEM_PROMPT
-    });
+            required: ['identifiedItem', 'category', 'condition', 'confidence', 'suggestedUnit', 'visualObservations']
+          } as any,
+          temperature: 0.2
+        },
+        systemInstruction: VISION_IDENTIFICATION_SYSTEM_PROMPT
+      });
 
-    const result = await model.generateContent([
-      {
-        inlineData: {
-          mimeType,
-          data: base64Data
+      const result = await model.generateContent([
+        {
+          inlineData: {
+            mimeType: effectiveMime,
+            data: base64Data
+          }
+        },
+        {
+          text: 'Examine this item photo carefully. Output strict JSON with: identifiedItem, category (produce|electronics|apparel|unknown), condition (fresh|fair|new|used|damaged), confidence (high|medium|low), suggestedUnit, visualObservations.'
         }
-      },
-      {
-        text: 'Examine this item photo carefully. Output strict JSON with: identifiedItem, category (produce|electronics|apparel|unknown), condition (fresh|fair|new|used|damaged), confidence (high|medium|low), suggestedUnit, visualObservations.'
+      ]);
+
+      const text = result.response.text();
+      if (!text) {
+        throw new Error('Empty response from Gemini Vision');
       }
-    ]);
 
-    const text = result.response.text();
-    if (!text) {
-      throw new Error('Empty response from Gemini Vision');
-    }
-
-    const parsed = JSON.parse(text) as VisionIdentificationResult;
-    return parsed;
+      return parseGeminiJsonResponse<VisionIdentificationResult>(text);
+    });
   } catch (error: any) {
-    console.error('Gemini Vision Identification Error:', error);
+    console.error('Gemini Vision Identification Error after fallback chain:', error);
     return {
       identifiedItem: 'Unrecognized Item',
       category: 'unknown',
@@ -118,58 +222,60 @@ export async function generatePriceEstimate(params: {
   itemName: string;
   category: ItemCategory | 'unknown';
   condition: ItemCondition;
-  location: string;
   localityTier: LocalityTier;
+  location: string;
   role?: UserRole;
-  seasonalFactor?: SeasonalFactor;
-  referenceBands: PriceBand[];
-  referenceSource: 'supabase' | 'seeded_baseline';
+  matchingBand?: PriceBand | null;
+  tierMatchingBand?: PriceBand | null;
+  referenceBands?: PriceBand[];
+  referenceSource?: 'supabase' | 'seeded_baseline';
+  seasonalFactor?: SeasonalFactor | null;
 }): Promise<EstimateResponse> {
   const {
     itemName,
     category,
     condition,
-    location,
     localityTier,
+    location,
     role = 'buyer',
     seasonalFactor,
-    referenceBands,
-    referenceSource
+    referenceBands
   } = params;
 
-  // Find the best matching reference band for the target tier
-  const tierMatchingBand = referenceBands.find(b => b.locality_tier === localityTier) || referenceBands[0];
-  const rawMin = tierMatchingBand ? Number(tierMatchingBand.base_min_price) : 50;
-  const rawMax = tierMatchingBand ? Number(tierMatchingBand.base_max_price) : 100;
-  const multiplier = tierMatchingBand ? Number(tierMatchingBand.locality_multiplier) : 1.0;
-  const unit = tierMatchingBand ? tierMatchingBand.unit : 'piece';
+  const tierMatchingBand = params.tierMatchingBand || 
+    (referenceBands?.find(b => b.locality_tier === localityTier) || referenceBands?.[0]);
 
-  // Apply seasonal factor if present (e.g., 1.25x for monsoon tomatoes, 0.85x for summer mangoes)
-  const seasonMultiplier = seasonalFactor ? seasonalFactor.multiplier : 1.0;
-  const baselineMin = Math.round(rawMin * seasonMultiplier);
-  const baselineMax = Math.round(rawMax * seasonMultiplier);
+  const rawMin = tierMatchingBand ? Number(tierMatchingBand.base_min_price) : 50;
+  const rawMax = tierMatchingBand ? Number(tierMatchingBand.base_max_price) : 120;
+  const unit = tierMatchingBand?.unit ?? 'piece';
+  const multiplier = tierMatchingBand ? Number(tierMatchingBand.locality_multiplier) : 1.0;
+  const referenceSource = params.referenceSource || (tierMatchingBand ? 'supabase' : 'seeded_baseline');
+
+  // Apply seasonal multiplier if commodity is produce
+  const seasonMult = seasonalFactor?.multiplier ?? 1.0;
+  const baselineMin = Math.round(rawMin * seasonMult);
+  const baselineMax = Math.round(rawMax * seasonMult);
 
   const genAI = getGeminiClient();
 
+  // If Gemini client not available, generate deterministic fallback
   if (!genAI) {
-    // Calculated algorithmic fallback if Gemini key is not configured
     const calcMin = baselineMin;
     const calcMax = baselineMax;
 
     const buyerTips = [
-      `Inspect the item condition thoroughly before mentioning any price.`,
-      `Start your counter-offer at ₹${Math.round(calcMin * 0.75)} (~25% below the lower corridor).`,
-      `For produce/small items, ask for a round figure or volume deal (e.g., 'Do kilo ka kitna doge?').`,
-      `Be polite but firm: 'Bhaiya, bagal wali dukan me ₹${calcMin} me mil raha tha.'`,
-      `Your walk-away threshold is ₹${calcMax}; beyond that, explore neighboring street stalls.`
+      'Inspect product quality thoroughly (seams, cables, or freshness) before starting your counter-offer.',
+      `Anchor your opening offer at ₹${Math.round(calcMin * 0.75)} to establish strong bargaining leverage.`,
+      `Aim to settle between ₹${calcMin} and ₹${Math.round((calcMin + calcMax) / 2)}, which gives the seller a fair transaction margin.`,
+      `Walk away if the seller refuses to go below ₹${calcMax} per ${unit}; similar items are available at neighboring stalls.`
     ];
 
     const sellerTips = [
-      `Politely state quality & freshness first: highlight that your stock is hand-selected from the morning mandi.`,
+      'Highlight origin and freshness immediately: inform the buyer your stock is fresh from morning wholesale arrivals.',
       `Start by quoting ₹${calcMax} per ${unit} to preserve room for customary customer bargaining.`,
-      `Counter lowball offers with bundle volume: 'Bhaiya, agar 2 ${unit} loge toh ₹${Math.round((calcMin + calcMax) / 2)} me laga doonga.'`,
+      `Counter lowball offers with bundle volume: "Bhaiya, agar 2 loge toh ₹${Math.round((calcMin + calcMax) / 2)} me laga doonga."`,
       `Stand firm on your bottom line (₹${calcMin}) to safeguard daily stall margins.`,
-      `Offer value reassurance: offer to let the customer inspect and weigh the goods on a digital scale.`
+      'Offer value reassurance: offer to let the customer inspect and weigh the goods on a digital scale.'
     ];
 
     return {
@@ -229,7 +335,7 @@ USER ROLE: ${role.toUpperCase()} (${role === 'seller' ? 'Vendor/Seller seeking f
 ITEM TO ESTIMATE:
 - Name: "${itemName}"
 - Category: "${category}"
-- Condition: "${condition}"
+- Observed Condition: "${condition}"
 
 LOCALITY CONTEXT:
 - Location / City: "${location}"
@@ -248,67 +354,65 @@ TASK:
 `;
 
   try {
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-1.5-flash',
-      generationConfig: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: SchemaType.OBJECT,
-          properties: {
-            priceRange: {
-              type: SchemaType.OBJECT,
-              properties: {
-                min: { type: SchemaType.NUMBER },
-                max: { type: SchemaType.NUMBER },
-                currency: { type: SchemaType.STRING },
-                unit: { type: SchemaType.STRING }
+    const parsed = await executeWithModelFallback(genAI, async (modelName) => {
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: SchemaType.OBJECT,
+            properties: {
+              priceRange: {
+                type: SchemaType.OBJECT,
+                properties: {
+                  min: { type: SchemaType.NUMBER },
+                  max: { type: SchemaType.NUMBER },
+                  currency: { type: SchemaType.STRING },
+                  unit: { type: SchemaType.STRING }
+                },
+                required: ['min', 'max', 'currency', 'unit']
               },
-              required: ['min', 'max', 'currency', 'unit']
-            },
-            confidence: {
-              type: SchemaType.STRING,
-              format: 'enum',
-              enum: ['high', 'medium', 'low']
-            },
-            reasoning: {
-              type: SchemaType.STRING
-            },
-            negotiationTips: {
-              type: SchemaType.ARRAY,
-              items: { type: SchemaType.STRING }
-            },
-            playbook: {
-              type: SchemaType.OBJECT,
-              properties: {
-                openingOffer: { type: SchemaType.STRING },
-                targetPrice: { type: SchemaType.STRING },
-                walkAwayPrice: { type: SchemaType.STRING },
-                concessionStrategy: { type: SchemaType.STRING },
-                keyPhrases: {
-                  type: SchemaType.ARRAY,
-                  items: { type: SchemaType.STRING }
-                }
+              confidence: {
+                type: SchemaType.STRING,
+                format: 'enum',
+                enum: ['high', 'medium', 'low']
               },
-              required: ['openingOffer', 'targetPrice', 'walkAwayPrice', 'concessionStrategy', 'keyPhrases']
+              reasoning: {
+                type: SchemaType.STRING
+              },
+              clarificationMessage: {
+                type: SchemaType.STRING
+              },
+              negotiationTips: {
+                type: SchemaType.ARRAY,
+                items: { type: SchemaType.STRING }
+              },
+              playbook: {
+                type: SchemaType.OBJECT,
+                properties: {
+                  openingOffer: { type: SchemaType.STRING },
+                  targetPrice: { type: SchemaType.STRING },
+                  walkAwayPrice: { type: SchemaType.STRING },
+                  concessionStrategy: { type: SchemaType.STRING },
+                  keyPhrases: {
+                    type: SchemaType.ARRAY,
+                    items: { type: SchemaType.STRING }
+                  }
+                },
+                required: ['openingOffer', 'targetPrice', 'walkAwayPrice', 'concessionStrategy', 'keyPhrases']
+              }
             },
-            clarificationMessage: {
-              type: SchemaType.STRING
-            }
-          },
-          required: ['priceRange', 'confidence', 'reasoning', 'negotiationTips', 'playbook']
-        } as any,
-        temperature: 0.3
-      },
-      systemInstruction: getPriceEstimationSystemPrompt(role)
+            required: ['priceRange', 'confidence', 'reasoning', 'negotiationTips', 'playbook']
+          } as any,
+          temperature: 0.3
+        },
+        systemInstruction: getPriceEstimationSystemPrompt(role)
+      });
+
+      const result = await model.generateContent(promptInput);
+      const text = result.response.text();
+      return parseGeminiJsonResponse<any>(text);
     });
-
-    const result = await model.generateContent(promptInput);
-    const text = result.response.text();
-    if (!text) {
-      throw new Error('Empty response from Gemini Pricing');
-    }
-
-    const parsed = JSON.parse(text);
 
     return {
       success: true,
@@ -344,7 +448,7 @@ TASK:
       disclaimer: 'Estimate based on category pricing patterns, not live market data'
     };
   } catch (error: any) {
-    console.error('Gemini Price Estimation Error:', error);
+    console.error('Gemini Price Estimation Error after fallback chain:', error);
     return {
       success: false,
       role,
@@ -389,7 +493,6 @@ TASK:
 /**
  * Generate a one-sentence plain-English seasonal insight using Gemini.
  * Gemini only explains pre-computed numbers — it never invents them.
- * Throws on failure so callers can apply their own fallback.
  */
 export async function generateSeasonalInsight(params: {
   itemName: string;
@@ -412,23 +515,27 @@ Price trend: ${trend}
 
 Output strict JSON: { "insight": "<one sentence, max 30 words, explaining WHY this seasonal pattern happens>" }`;
 
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-1.5-flash',
-    generationConfig: {
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: SchemaType.OBJECT,
-        properties: { insight: { type: SchemaType.STRING } },
-        required: ['insight'],
-      } as any,
-      temperature: 0.4,
-      maxOutputTokens: 80,
-    },
-    systemInstruction: SEASONAL_INSIGHT_SYSTEM_PROMPT,
-  });
+  return await executeWithModelFallback(genAI, async (modelName) => {
+    const model = genAI.getGenerativeModel({
+      model: modelName,
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: SchemaType.OBJECT,
+          properties: { insight: { type: SchemaType.STRING } },
+          required: ['insight'],
+        } as any,
+        temperature: 0.4,
+        maxOutputTokens: 80,
+      },
+      systemInstruction: SEASONAL_INSIGHT_SYSTEM_PROMPT,
+    });
 
-  const result = await model.generateContent(prompt);
-  const text = result.response.text();
-  const parsed = JSON.parse(text);
-  return parsed.insight as string;
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+    const parsed = parseGeminiJsonResponse<{ insight: string }>(text);
+    return parsed.insight;
+  });
 }
+
+export const estimatePrice = generatePriceEstimate;
