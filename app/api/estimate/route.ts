@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { identifyItemFromImage, generatePriceEstimate } from '@/lib/gemini';
-import { queryPriceBands, determineLocalityTier } from '@/lib/supabase';
-import { ItemCategory, ItemCondition, LocalityTier } from '@/lib/types';
+import { queryPriceBands, determineLocalityTier, getSeasonalMultiplier } from '@/lib/supabase';
+import { ItemCategory, ItemCondition, LocalityTier, UserRole } from '@/lib/types';
 
 export const maxDuration = 30; // 30s timeout for Vercel
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { itemText, itemPhoto, location, categoryHint } = body;
+    const { itemText, itemPhoto, location, categoryHint, role: rawRole } = body;
+
+    const role: UserRole = rawRole === 'seller' ? 'seller' : 'buyer';
 
     if (!itemText && !itemPhoto) {
       return NextResponse.json(
@@ -66,6 +68,7 @@ export async function POST(req: NextRequest) {
     if (detectedCategory === 'unknown') {
       return NextResponse.json({
         success: false,
+        role,
         confidence: 'low',
         priceRange: { min: 0, max: 0, currency: '₹', unit: 'piece' },
         matchedCategory: 'unknown',
@@ -83,20 +86,25 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Step 4: Query seeded Supabase price bands
+    // Step 4: Compute seasonal multiplier
+    const seasonalFactor = getSeasonalMultiplier(detectedCategory, detectedName);
+
+    // Step 5: Query seeded Supabase price bands
     const { bands, source } = await queryPriceBands(
       detectedCategory,
       detectedName,
       localityTier
     );
 
-    // Step 5: Call Gemini text/structured mode for price estimate & negotiation advice
+    // Step 6: Call Gemini text/structured mode for price estimate & negotiation advice
     const estimate = await generatePriceEstimate({
       itemName: detectedName || 'Local market merchandise',
       category: detectedCategory,
       condition: detectedCondition,
       location: locationString || 'Local Bazaar',
       localityTier,
+      role,
+      seasonalFactor,
       referenceBands: bands,
       referenceSource: source
     });
@@ -104,7 +112,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ...estimate,
       location: locationString,
-      localityTier
+      localityTier,
+      seasonalFactor
     });
   } catch (error: any) {
     console.error('API /estimate error:', error);

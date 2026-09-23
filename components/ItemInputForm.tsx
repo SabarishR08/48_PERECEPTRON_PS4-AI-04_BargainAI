@@ -12,13 +12,14 @@ import {
   Cpu,
   Shirt
 } from 'lucide-react';
-import { ItemCategory, LocalityTier, VisionIdentificationResult } from '@/lib/types';
+import { ItemCategory, LocalityTier, VisionIdentificationResult, UserRole } from '@/lib/types';
 import ImageUploader from './ImageUploader';
 
 interface ItemInputFormProps {
   onSubmit: (data: {
     itemText: string;
     itemPhoto: string | null;
+    role: UserRole;
     location: {
       city: string;
       locality: string;
@@ -66,6 +67,7 @@ const PRESET_LOCATIONS: { label: string; city: string; locality: string; tier: L
 ];
 
 export default function ItemInputForm({ onSubmit, isLoading }: ItemInputFormProps) {
+  const [role, setRole] = useState<UserRole>('buyer');
   const [itemText, setItemText] = useState('');
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<ItemCategory | ''>('');
@@ -108,6 +110,7 @@ export default function ItemInputForm({ onSubmit, isLoading }: ItemInputFormProp
     onSubmit({
       itemText,
       itemPhoto: photoBase64,
+      role,
       location: locationData,
       categoryHint: selectedCategory ? (selectedCategory as ItemCategory) : undefined
     });
@@ -121,6 +124,44 @@ export default function ItemInputForm({ onSubmit, isLoading }: ItemInputFormProp
   return (
     <form onSubmit={handleSubmit} className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200/80">
       <div className="space-y-6">
+
+        {/* Role Toggle: Buyer vs Seller */}
+        <div>
+          <label className="block text-xs uppercase tracking-wider font-bold text-slate-500 mb-2">
+            Select Your Role in the Market:
+          </label>
+          <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
+            <button
+              type="button"
+              onClick={() => setRole('buyer')}
+              className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                role === 'buyer'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span>🛒 I am a Buyer</span>
+              <span className="hidden sm:inline text-[10px] opacity-80">(Bargain Guidance)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setRole('seller')}
+              className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                role === 'seller'
+                  ? 'bg-amber-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span>🏪 I am a Seller / Vendor</span>
+              <span className="hidden sm:inline text-[10px] opacity-80">(Margin Defense)</span>
+            </button>
+          </div>
+          <p className="mt-1.5 text-[11px] text-slate-400 italic">
+            {role === 'buyer'
+              ? '💡 The objective fair price remains identical. You get counter-offer anchoring and walk-away points.'
+              : '💡 The objective fair price remains identical. You get margin defense, volume incentive phrasing, and bottom-line floor guidance.'}
+          </p>
+        </div>
         
         {/* Step 1: Photo Upload */}
         <div>

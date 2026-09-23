@@ -6,6 +6,8 @@ export type ItemCondition = 'new' | 'used' | 'damaged' | 'fresh' | 'fair';
 
 export type ConfidenceLevel = 'high' | 'medium' | 'low';
 
+export type UserRole = 'buyer' | 'seller';
+
 export interface PriceBand {
   id?: string;
   category: ItemCategory;
@@ -27,16 +29,25 @@ export interface VisionIdentificationResult {
   suggestedUnit: string;
 }
 
+export interface SeasonalFactor {
+  seasonName: string;
+  multiplier: number;
+  impactLabel: string;
+  reason: string;
+}
+
 export interface NegotiationPlaybook {
-  openingOffer: string;
-  targetPrice: string;
-  walkAwayPrice: string;
+  role: UserRole;
+  openingOffer: string; // For buyer: opening counter. For seller: initial asking quote.
+  targetPrice: string;  // Fair settlement target.
+  walkAwayPrice: string;// For buyer: ceiling price. For seller: bottom-line margin floor.
   concessionStrategy: string;
   keyPhrases: string[];
 }
 
 export interface EstimateResponse {
   success: boolean;
+  role: UserRole;
   priceRange: {
     min: number;
     max: number;
@@ -52,12 +63,14 @@ export interface EstimateResponse {
   condition: ItemCondition;
   localityTier: LocalityTier;
   location: string;
+  seasonalFactor?: SeasonalFactor;
   referenceData?: {
     source: 'supabase' | 'seeded_baseline';
     baselineMin: number;
     baselineMax: number;
     multiplier: number;
     unit: string;
+    lastUpdated?: string;
   };
   clarificationMessage?: string;
   disclaimer: string;
@@ -66,6 +79,7 @@ export interface EstimateResponse {
 export interface EstimateRequest {
   itemText: string;
   itemPhoto?: string; // base64 string
+  role?: UserRole;
   location: {
     city: string;
     locality?: string;

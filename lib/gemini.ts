@@ -5,10 +5,12 @@ import {
   ItemCategory, 
   LocalityTier, 
   ItemCondition,
+  UserRole,
+  SeasonalFactor,
   PriceBand 
 } from './types';
 import { VISION_IDENTIFICATION_SYSTEM_PROMPT } from './prompts/vision';
-import { PRICE_ESTIMATION_SYSTEM_PROMPT } from './prompts/pricing';
+import { getPriceEstimationSystemPrompt, PRICE_ESTIMATION_JSON_SCHEMA } from './prompts/pricing';
 
 function getGeminiClient(): GoogleGenerativeAI | null {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -108,7 +110,7 @@ export async function identifyItemFromImage(
 }
 
 /**
- * Generate fair price range, reasoning, and negotiation tactics
+ * Generate fair price range, reasoning, and role-tailored negotiation tactics
  */
 export async function generatePriceEstimate(params: {
   itemName: string;
@@ -116,6 +118,8 @@ export async function generatePriceEstimate(params: {
   condition: ItemCondition;
   location: string;
   localityTier: LocalityTier;
+  role?: UserRole;
+  seasonalFactor?: SeasonalFactor;
   referenceBands: PriceBand[];
   referenceSource: 'supabase' | 'seeded_baseline';
 }): Promise<EstimateResponse> {
@@ -125,27 +129,50 @@ export async function generatePriceEstimate(params: {
     condition,
     location,
     localityTier,
+    role = 'buyer',
+    seasonalFactor,
     referenceBands,
     referenceSource
   } = params;
 
   // Find the best matching reference band for the target tier
   const tierMatchingBand = referenceBands.find(b => b.locality_tier === localityTier) || referenceBands[0];
-  const baselineMin = tierMatchingBand ? Number(tierMatchingBand.base_min_price) : 50;
-  const baselineMax = tierMatchingBand ? Number(tierMatchingBand.base_max_price) : 100;
+  const rawMin = tierMatchingBand ? Number(tierMatchingBand.base_min_price) : 50;
+  const rawMax = tierMatchingBand ? Number(tierMatchingBand.base_max_price) : 100;
   const multiplier = tierMatchingBand ? Number(tierMatchingBand.locality_multiplier) : 1.0;
   const unit = tierMatchingBand ? tierMatchingBand.unit : 'piece';
+
+  // Apply seasonal factor if present (e.g., 1.25x for monsoon tomatoes, 0.85x for summer mangoes)
+  const seasonMultiplier = seasonalFactor ? seasonalFactor.multiplier : 1.0;
+  const baselineMin = Math.round(rawMin * seasonMultiplier);
+  const baselineMax = Math.round(rawMax * seasonMultiplier);
 
   const genAI = getGeminiClient();
 
   if (!genAI) {
-    // Note: In our seed schema, base_min_price and base_max_price for tier1_metro/rural
-    // are already adjusted for that specific tier, so we use them directly to prevent double-counting.
-    const calcMin = Math.round(baselineMin);
-    const calcMax = Math.round(baselineMax);
+    // Calculated algorithmic fallback if Gemini key is not configured
+    const calcMin = baselineMin;
+    const calcMax = baselineMax;
+
+    const buyerTips = [
+      `Inspect the item condition thoroughly before mentioning any price.`,
+      `Start your counter-offer at ₹${Math.round(calcMin * 0.75)} (~25% below the lower corridor).`,
+      `For produce/small items, ask for a round figure or volume deal (e.g., 'Do kilo ka kitna doge?').`,
+      `Be polite but firm: 'Bhaiya, bagal wali dukan me ₹${calcMin} me mil raha tha.'`,
+      `Your walk-away threshold is ₹${calcMax}; beyond that, explore neighboring street stalls.`
+    ];
+
+    const sellerTips = [
+      `Politely state quality & freshness first: highlight that your stock is hand-selected from the morning mandi.`,
+      `Start by quoting ₹${calcMax} per ${unit} to preserve room for customary customer bargaining.`,
+      `Counter lowball offers with bundle volume: 'Bhaiya, agar 2 ${unit} loge toh ₹${Math.round((calcMin + calcMax) / 2)} me laga doonga.'`,
+      `Stand firm on your bottom line (₹${calcMin}) to safeguard daily stall margins.`,
+      `Offer value reassurance: offer to let the customer inspect and weigh the goods on a digital scale.`
+    ];
 
     return {
       success: true,
+      role,
       priceRange: {
         min: calcMin,
         max: calcMax,
@@ -153,43 +180,50 @@ export async function generatePriceEstimate(params: {
         unit
       },
       confidence: category === 'unknown' ? 'low' : 'medium',
-      reasoning: `Calculated from ${referenceSource} reference data: baseline [₹${baselineMin} - ₹${baselineMax}] with a ${multiplier}x multiplier for ${localityTier} (${location}). Factor in item condition (${condition}). Note: Configure GEMINI_API_KEY in .env.local for rich AI market negotiation insights!`,
-      negotiationTips: [
-        `Inspect the item condition thoroughly before mentioning any price.`,
-        `Start your counter-offer at ₹${Math.round(calcMin * 0.75)} (${Math.round(calcMin * 0.75)} is ~25% below the lower bracket).`,
-        `For produce/small items, ask for a round figure or volume deal (e.g., 'Do kilo ka kitna doge?').`,
-        `Be polite but firm: 'Bhaiya, bagal wali dukan me ₹${calcMin} me mil raha tha.' (The adjacent stall is offering it for ₹${calcMin}).`,
-        `Your walk-away threshold is ₹${calcMax}; beyond that, explore neighboring street stalls.`
-      ],
+      reasoning: `Calculated from ${referenceSource} reference data: baseline [₹${rawMin} - ₹${rawMax}] with a ${multiplier}x multiplier for ${localityTier} (${location})${seasonalFactor ? ` and ${seasonalFactor.impactLabel} (${seasonalFactor.seasonName})` : ''}. Note: Configure GEMINI_API_KEY in .env.local for rich AI market negotiation insights!`,
+      negotiationTips: role === 'seller' ? sellerTips : buyerTips,
       playbook: {
-        openingOffer: `₹${Math.round(calcMin * 0.75)} per ${unit}`,
+        role,
+        openingOffer: role === 'seller' ? `₹${calcMax} per ${unit}` : `₹${Math.round(calcMin * 0.75)} per ${unit}`,
         targetPrice: `₹${calcMin} - ₹${Math.round((calcMin + calcMax) / 2)} per ${unit}`,
-        walkAwayPrice: `₹${calcMax} per ${unit}`,
-        concessionStrategy: `Never accept the first quote. Offer ₹${Math.round(calcMin * 0.75)}, and if they hesitate, slowly inch up to ₹${calcMin} only if quality is unblemished.`,
-        keyPhrases: [
-          `"Sahi daam lagao bhaiya, regular customer hoon." (Give me a fair price, I am a regular buyer)`,
-          `"Thoda aur adjust karo, cash de raha hoon." (Give a little discount, I am paying cash)`,
-          `"Theek hai, aage dekh lete hain." (Alright, let me check the other stalls)`
-        ]
+        walkAwayPrice: role === 'seller' ? `₹${calcMin} per ${unit} (Margin floor)` : `₹${calcMax} per ${unit} (Ceiling)`,
+        concessionStrategy: role === 'seller'
+          ? `Quote ₹${calcMax}. Only concede down towards ₹${Math.round((calcMin + calcMax) / 2)} if the customer buys volume or pays cash immediately.`
+          : `Never accept the first quote. Offer ₹${Math.round(calcMin * 0.75)}, and if they hesitate, slowly inch up to ₹${calcMin} only if quality is unblemished.`,
+        keyPhrases: role === 'seller'
+          ? [
+              `"Bhaiya subah mandi se chhan ke taaza maal laya hoon, ek daam badhiya quality hai." (Fresh handpicked stock from morning mandi)`,
+              `"Aap regular customer ho, 2 piece loge toh thoda aur adjust kar doonga." (If you take 2 pieces, I can give a volume discount)`,
+              `"Isse kam me toh lagat bhi nahi niklegi bhaiya." (Below this I cannot even recover wholesale cost)`
+            ]
+          : [
+              `"Sahi daam lagao bhaiya, regular customer hoon." (Give me a fair price, I am a regular buyer)`,
+              `"Thoda aur adjust karo, cash de raha hoon." (Give a little discount, I am paying cash)`,
+              `"Theek hai, aage dekh lete hain." (Alright, let me check the other stalls)`
+            ]
       },
       matchedCategory: category,
       identifiedItem: itemName,
       condition,
       localityTier,
       location,
+      seasonalFactor,
       referenceData: {
         source: referenceSource,
-        baselineMin,
-        baselineMax,
+        baselineMin: rawMin,
+        baselineMax: rawMax,
         multiplier,
-        unit
+        unit,
+        lastUpdated: tierMatchingBand?.last_updated || new Date().toISOString()
       },
       disclaimer: 'Estimate based on category pricing patterns, not live market data'
     };
   }
 
-  // Construct structured prompt for Gemini
+  // Construct structured prompt for Gemini with role & seasonal context
   const promptInput = `
+USER ROLE: ${role.toUpperCase()} (${role === 'seller' ? 'Vendor/Seller seeking fair margin defense' : 'Shopper/Buyer seeking fair price protection'})
+
 ITEM TO ESTIMATE:
 - Name: "${itemName}"
 - Category: "${category}"
@@ -198,15 +232,17 @@ ITEM TO ESTIMATE:
 LOCALITY CONTEXT:
 - Location / City: "${location}"
 - Locality Tier: "${localityTier}" (Multiplier ~${multiplier})
+${seasonalFactor ? `- Seasonal Factor: "${seasonalFactor.seasonName}" (${seasonalFactor.impactLabel}, ${seasonalFactor.reason})` : ''}
 
 REFERENCE PRICE BAND FROM DATABASE (${referenceSource}):
 ${tierMatchingBand ? JSON.stringify(tierMatchingBand) : 'No exact match found; utilize category baseline heuristics.'}
+Adjusted Baseline Corridor: ₹${baselineMin} - ₹${baselineMax} / ${unit}
 
 TASK:
-1. Suggest a realistic fair price range [min, max] in Indian Rupees (₹) and specified unit.
-2. Ground your reasoning strictly on the reference data and locality multiplier.
+1. Suggest an objective, fair market price range [min, max] in Indian Rupees (₹) and specified unit.
+2. Ground your reasoning strictly on the reference data, locality multiplier, and seasonal factors.
 3. If category is "unknown" or input is out of scope (not produce/electronics accessories/apparel), return confidence: "low", priceRange [0, 0], and a helpful clarification message.
-4. Formulate 3-5 street-smart local market negotiation tips + tactical playbook (opening offer, target, walk-away, concession strategy, natural spoken vernacular bargaining phrases with English translation).
+4. Formulate 3-5 street-smart negotiation tips and a structured playbook specifically tailored for the ${role.toUpperCase()} role (openingOffer, targetPrice, walkAwayPrice, concessionStrategy, natural spoken vernacular bargaining phrases with English translation).
 `;
 
   try {
@@ -261,7 +297,7 @@ TASK:
         } as any,
         temperature: 0.3
       },
-      systemInstruction: PRICE_ESTIMATION_SYSTEM_PROMPT
+      systemInstruction: getPriceEstimationSystemPrompt(role)
     });
 
     const result = await model.generateContent(promptInput);
@@ -274,6 +310,7 @@ TASK:
 
     return {
       success: true,
+      role,
       priceRange: {
         min: parsed.priceRange.min,
         max: parsed.priceRange.max,
@@ -283,19 +320,24 @@ TASK:
       confidence: parsed.confidence || (category === 'unknown' ? 'low' : 'high'),
       reasoning: parsed.reasoning,
       negotiationTips: parsed.negotiationTips || [],
-      playbook: parsed.playbook,
+      playbook: {
+        ...parsed.playbook,
+        role
+      },
       clarificationMessage: parsed.clarificationMessage,
       matchedCategory: category,
       identifiedItem: itemName,
       condition,
       localityTier,
       location,
+      seasonalFactor,
       referenceData: {
         source: referenceSource,
-        baselineMin,
-        baselineMax,
+        baselineMin: rawMin,
+        baselineMax: rawMax,
         multiplier,
-        unit
+        unit,
+        lastUpdated: tierMatchingBand?.last_updated || new Date().toISOString()
       },
       disclaimer: 'Estimate based on category pricing patterns, not live market data'
     };
@@ -303,24 +345,40 @@ TASK:
     console.error('Gemini Price Estimation Error:', error);
     return {
       success: false,
+      role,
       priceRange: {
-        min: Math.round(baselineMin * multiplier),
-        max: Math.round(baselineMax * multiplier),
+        min: baselineMin,
+        max: baselineMax,
         currency: '₹',
         unit
       },
       confidence: 'low',
       reasoning: `Gemini API query encountered an issue (${error?.message || 'Unknown error'}). Fallback estimate generated based on baseline data.`,
-      negotiationTips: [
+      negotiationTips: role === 'seller' ? [
+        'State your purchase costs and emphasize morning freshness.',
+        'Offer discounts only on volume/bulk purchases.',
+        'Politely decline prices below your wholesale cost.'
+      ] : [
         'Always check the product quality before finalizing price.',
         'Offer 15-20% below the seller’s first quote.',
         'Compare across 2-3 nearby stalls in the market.'
       ],
+      playbook: {
+        role,
+        openingOffer: role === 'seller' ? `₹${baselineMax}` : `₹${Math.round(baselineMin * 0.75)}`,
+        targetPrice: `₹${baselineMin} - ₹${Math.round((baselineMin + baselineMax) / 2)}`,
+        walkAwayPrice: role === 'seller' ? `₹${baselineMin}` : `₹${baselineMax}`,
+        concessionStrategy: 'Hold firm on standard fair corridor values.',
+        keyPhrases: [
+          role === 'seller' ? '"Sahi lagaya hai bhaiya, ek daam taaza maal hai."' : '"Sahi daam lagao bhaiya, regular customer hoon."'
+        ]
+      },
       matchedCategory: category,
       identifiedItem: itemName,
       condition,
       localityTier,
       location,
+      seasonalFactor,
       disclaimer: 'Estimate based on category pricing patterns, not live market data'
     };
   }

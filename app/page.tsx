@@ -24,6 +24,7 @@ export default function Home() {
   const handleEstimate = async (formData: {
     itemText: string;
     itemPhoto: string | null;
+    role: import('@/lib/types').UserRole;
     location: {
       city: string;
       locality: string;

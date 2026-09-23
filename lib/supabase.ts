@@ -150,3 +150,106 @@ export function determineLocalityTier(cityOrLocality: string): { tier: LocalityT
 
   return { tier: 'tier2_city', multiplier: 1.00 };
 }
+
+/**
+ * Determine seasonal pricing factor based on commodity and calendar month
+ * Month is 1-indexed (1 = Jan, 9 = Sept, etc.)
+ */
+export function getSeasonalMultiplier(
+  category: ItemCategory,
+  itemName: string,
+  month: number = new Date().getMonth() + 1
+): { seasonName: string; multiplier: number; impactLabel: string; reason: string } {
+  if (category !== 'produce') {
+    // Non-produce categories (electronics, apparel) are non-perishable with stable seasonal baselines
+    const isWinterFestival = month >= 10 && month <= 12;
+    return {
+      seasonName: isWinterFestival ? 'Festival / Winter Demand' : 'Standard Season',
+      multiplier: 1.00,
+      impactLabel: 'Stable baseline',
+      reason: 'Electronics and apparel follow structural wholesale manufacturing baselines with negligible daily perishable volatility.'
+    };
+  }
+
+  const lower = itemName.toLowerCase();
+
+  // Tomatoes: Heavy monsoon rainfall disrupts supply (July to September)
+  if (lower.includes('tomato')) {
+    if (month >= 7 && month <= 9) {
+      return {
+        seasonName: 'Monsoon Supply Pinch',
+        multiplier: 1.25,
+        impactLabel: '+25% Monsoon Inflation',
+        reason: 'Heavy monsoon rains and logistics disruption in southern/western producing belts temporarily tighten street arrival volumes.'
+      };
+    } else if (month >= 11 || month <= 2) {
+      return {
+        seasonName: 'Winter Flush Harvest',
+        multiplier: 0.90,
+        impactLabel: '-10% Winter Harvest Surplus',
+        reason: 'Peak winter crop arrivals create plentiful local supply across northern and central mandis.'
+      };
+    }
+  }
+
+  // Onions: Post-monsoon gap (Sept to Nov) before kharif harvest
+  if (lower.includes('onion')) {
+    if (month >= 9 && month <= 11) {
+      return {
+        seasonName: 'Pre-Kharif Transition',
+        multiplier: 1.20,
+        impactLabel: '+20% Seasonal Transition',
+        reason: 'Storage depletion before fresh kharif arrivals causes seasonal price firming in wholesale hubs.'
+      };
+    }
+  }
+
+  // Mangoes: Peak summer fruit (April to June)
+  if (lower.includes('mango')) {
+    if (month >= 4 && month <= 6) {
+      return {
+        seasonName: 'Peak Summer Harvest',
+        multiplier: 0.85,
+        impactLabel: '-15% Peak Harvest Inflow',
+        reason: 'Main season orchard arrivals peak in street mandis, allowing high buyer bargaining leverage.'
+      };
+    } else {
+      return {
+        seasonName: 'Off-Season Scarcity',
+        multiplier: 1.35,
+        impactLabel: '+35% Off-Season Premium',
+        reason: 'Out-of-season fruit relies on cold storage or inter-state cold chains.'
+      };
+    }
+  }
+
+  // Greens (Spinach/Palak): Flourish in winter (Nov to Feb)
+  if (lower.includes('spinach') || lower.includes('palak')) {
+    if (month >= 11 || month <= 2) {
+      return {
+        seasonName: 'Winter Peak Harvest',
+        multiplier: 0.80,
+        impactLabel: '-20% Plentiful Local Harvest',
+        reason: 'Leafy greens thrive in winter with daily local farm harvests yielding abundant street supply.'
+      };
+    }
+  }
+
+  // General produce baseline
+  if (month >= 7 && month <= 9) {
+    return {
+      seasonName: 'Monsoon Season',
+      multiplier: 1.10,
+      impactLabel: '+10% Rain Logistics Factor',
+      reason: 'Monsoon transport and spoilage overheads slightly lift mandi clearance rates.'
+    };
+  }
+
+  return {
+    seasonName: 'Regular Market Season',
+    multiplier: 1.00,
+    impactLabel: 'Neutral season factor',
+    reason: 'Standard seasonal supply and steady consumer retail demand in regional mandis.'
+  };
+}
+
