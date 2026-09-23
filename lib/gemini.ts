@@ -83,50 +83,80 @@ async function resolveWorkingModels(): Promise<string[]> {
 }
 
 /**
- * Executes a Gemini operation with automatic model fallback across candidate versions
+ * Executes a Promise with a strict timeout rejection
+ */
+export function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: NodeJS.Timeout;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    clearTimeout(timer);
+  });
+}
+
+/**
+ * Executes a Gemini operation with automatic model fallback across candidate versions,
+ * strictly bounded by totalTimeoutMs to prevent Vercel 504 serverless invocation timeouts.
  */
 async function executeWithModelFallback<T>(
   genAI: GoogleGenerativeAI,
-  operation: (modelName: string) => Promise<T>
+  operation: (modelName: string) => Promise<T>,
+  totalTimeoutMs: number = 7000
 ): Promise<T> {
-  // Fast path: Try primary model immediately without waiting for ListModels network call
+  const deadline = Date.now() + totalTimeoutMs;
   const primary = cachedWorkingModel || DEFAULT_GEMINI_MODEL;
+
+  const primaryBudget = Math.min(totalTimeoutMs, Math.max(1500, deadline - Date.now()));
   try {
-    const result = await operation(primary);
+    const result = await withTimeout(operation(primary), primaryBudget, `Primary model (${primary})`);
     cachedWorkingModel = primary;
     return result;
   } catch (err: any) {
-    const errMsg = err?.message || String(err);
-    console.warn(`Primary model "${primary}" failed (${errMsg}). Resolving candidate fallback models...`);
-
-    const models = await resolveWorkingModels();
-    let lastError: any = err;
-
-    for (const modelName of models) {
-      if (modelName === primary) continue;
-      try {
-        const result = await operation(modelName);
-        cachedWorkingModel = modelName;
-        return result;
-      } catch (fallbackErr: any) {
-        lastError = fallbackErr;
-        console.warn(`Fallback model "${modelName}" failed: ${fallbackErr?.message || fallbackErr}`);
-      }
+    const remainingTime = deadline - Date.now();
+    if (remainingTime < 2000) {
+      // Under 2s remaining — throw immediately so caller can return local deterministic fallback in < 10ms
+      console.warn(`Primary model "${primary}" failed or timed out (${err?.message}). Insufficient time for candidate fallback (${remainingTime}ms remaining).`);
+      throw err;
     }
 
-    throw lastError || new Error('All candidate Gemini models failed.');
+    console.warn(`Primary model "${primary}" failed (${err?.message}). Attempting fast candidate fallback with ${remainingTime}ms remaining...`);
+    const fallbackCandidates = FALLBACK_MODEL_CANDIDATES.filter(m => m !== primary);
+    const candidate = fallbackCandidates[0] || 'gemini-2.0-flash';
+    
+    try {
+      const result = await withTimeout(operation(candidate), remainingTime - 400, `Fallback model (${candidate})`);
+      cachedWorkingModel = candidate;
+      return result;
+    } catch (fallbackErr: any) {
+      console.warn(`Candidate model "${candidate}" failed (${fallbackErr?.message || fallbackErr}). Triggering algorithmic fallback.`);
+      throw fallbackErr || err;
+    }
   }
 }
 
 /**
- * Clean and robust JSON parsing for Gemini text responses (strips markdown code blocks)
+ * Clean and robust JSON parsing for Gemini text responses (strips markdown code blocks and preambles)
  */
-function parseGeminiJsonResponse<T>(text: string): T {
-  let cleaned = text.trim();
-  if (cleaned.startsWith('```')) {
-    cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+function parseGeminiJsonResponse<T>(text: string, fallback?: T): T {
+  try {
+    let cleaned = text.trim();
+    const jsonMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    if (jsonMatch) {
+      cleaned = jsonMatch[1].trim();
+    } else {
+      const objectMatch = cleaned.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+      if (objectMatch) {
+        cleaned = objectMatch[1].trim();
+      }
+    }
+    return JSON.parse(cleaned) as T;
+  } catch (err) {
+    if (fallback !== undefined) {
+      return fallback;
+    }
+    throw err;
   }
-  return JSON.parse(cleaned) as T;
 }
 
 /**
@@ -210,7 +240,7 @@ export async function identifyItemFromImage(
       }
 
       return parseGeminiJsonResponse<VisionIdentificationResult>(text);
-    });
+    }, 7500);
   } catch (error: any) {
     console.error('Gemini Vision Identification Error after fallback chain:', error);
     return {
@@ -421,7 +451,7 @@ TASK:
       const result = await model.generateContent(promptInput);
       const text = result.response.text();
       return parseGeminiJsonResponse<any>(text);
-    });
+    }, 6500);
 
     return {
       success: true,
@@ -544,7 +574,7 @@ Output strict JSON: { "insight": "<one sentence, max 30 words, explaining WHY th
     const text = result.response.text();
     const parsed = parseGeminiJsonResponse<{ insight: string }>(text);
     return parsed.insight;
-  });
+  }, 3500);
 }
 
 export const estimatePrice = generatePriceEstimate;

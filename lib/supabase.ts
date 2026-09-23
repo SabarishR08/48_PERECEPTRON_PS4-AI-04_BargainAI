@@ -96,12 +96,18 @@ export async function queryPriceBands(
         query = query.ilike('item_name', `%${queryText}%`);
       }
 
-      const { data, error } = await query;
+      // Strict 2500ms timeout guard for Supabase database query
+      let timer: NodeJS.Timeout;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('Supabase price_bands query timed out')), 2500);
+      });
+
+      const { data, error } = await Promise.race([query, timeoutPromise]).finally(() => clearTimeout(timer));
       if (!error && data && data.length > 0) {
         return { bands: data as PriceBand[], source: 'supabase' };
       }
     } catch (e) {
-      console.warn('Supabase query error, falling back to seeded dataset:', e);
+      console.warn('Supabase query error or timeout, falling back to seeded dataset:', e);
     }
   }
 
@@ -375,15 +381,21 @@ export async function querySeasonalHistory(
 
   if (supabase) {
     try {
-      const { data, error } = await supabase
+      let timer: NodeJS.Timeout;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('Supabase seasonal_price_history query timed out')), 2500);
+      });
+
+      const queryPromise = supabase
         .from('seasonal_price_history')
         .select('*')
         .ilike('item_name', `%${itemName.split(' ')[0]}%`)
         .eq('category', category)
         .eq('locality_tier', tier)
         .eq('quality_grade', 'good')
-        // if there's a year column we would add .eq('year', year), assuming year is not there
         .order('month', { ascending: true });
+
+      const { data, error } = await Promise.race([queryPromise, timeoutPromise]).finally(() => clearTimeout(timer));
 
       if (!error && data && data.length >= 4) {
         const history: SeasonalHistoryPoint[] = data.map((row: any) => ({
@@ -396,7 +408,7 @@ export async function querySeasonalHistory(
         return { history, source: 'supabase' };
       }
     } catch (e) {
-      console.warn('Supabase seasonal query error, falling back:', e);
+      console.warn('Supabase seasonal query error or timeout, falling back:', e);
     }
   }
 

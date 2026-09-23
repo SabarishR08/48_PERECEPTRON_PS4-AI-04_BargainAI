@@ -10,6 +10,54 @@ interface ImageUploaderProps {
   isAnalyzing?: boolean;
 }
 
+/**
+ * Compresses and resizes high-resolution mobile photos to prevent payload overflow and 504 timeouts.
+ */
+function resizeImageFile(file: File, maxDimension: number = 1024, quality: number = 0.85): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Failed to read image file'));
+    reader.onload = () => {
+      const rawResult = reader.result as string;
+      const img = new Image();
+      img.onerror = () => resolve(rawResult); // graceful fallback to raw base64 if decoding fails
+      img.onload = () => {
+        try {
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxDimension || height > maxDimension) {
+            if (width > height) {
+              height = Math.round((height * maxDimension) / width);
+              width = maxDimension;
+            } else {
+              width = Math.round((width * maxDimension) / height);
+              height = maxDimension;
+            }
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(rawResult);
+            return;
+          }
+
+          ctx.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL('image/jpeg', quality);
+          resolve(dataUrl);
+        } catch {
+          resolve(rawResult);
+        }
+      };
+      img.src = rawResult;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function ImageUploader({
   onImageSelected,
   onAnalysisComplete,
@@ -28,20 +76,20 @@ export default function ImageUploader({
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const base64 = reader.result as string;
+    setIsProcessing(true);
+    try {
+      // Downscale camera photos client-side to ~150KB to ensure sub-second transfer and eliminate 504 timeouts
+      const base64 = await resizeImageFile(file, 1024, 0.85);
       setPreview(base64);
       onImageSelected(base64);
 
       // Trigger instant standalone identification if callback provided
       if (onAnalysisComplete) {
-        setIsProcessing(true);
         try {
           const res = await fetch('/api/identify-item', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ photo: base64, mimeType: file.type })
+            body: JSON.stringify({ photo: base64, mimeType: 'image/jpeg' })
           });
           const json = await res.json();
           if (json.success && json.data) {
@@ -49,12 +97,13 @@ export default function ImageUploader({
           }
         } catch (err) {
           console.error('Auto photo identification error:', err);
-        } finally {
-          setIsProcessing(false);
         }
       }
-    };
-    reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Image resizing or upload error:', err);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleClear = () => {
