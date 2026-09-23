@@ -117,11 +117,7 @@ async function executeWithModelFallback<T>(
   totalTimeoutMs: number = 7000
 ): Promise<T> {
   const deadline = Date.now() + totalTimeoutMs;
-  let primary = cachedWorkingModel;
-  if (!primary) {
-    const models = await resolveWorkingModels();
-    primary = models[0] || DEFAULT_GEMINI_MODEL;
-  }
+  const primary = cachedWorkingModel || DEFAULT_GEMINI_MODEL;
 
   const primaryBudget = Math.min(totalTimeoutMs, Math.max(1500, deadline - Date.now()));
   try {
@@ -129,14 +125,17 @@ async function executeWithModelFallback<T>(
     cachedWorkingModel = primary;
     return result;
   } catch (err: any) {
+    const primaryErrMsg = err?.message || String(err);
+    console.warn(`Primary model "${primary}" failed or timed out: ${primaryErrMsg}`);
+
     const remainingTime = deadline - Date.now();
     if (remainingTime < 2000) {
       // Under 2s remaining — throw immediately so caller can return local deterministic fallback in < 10ms
-      console.warn(`Primary model "${primary}" failed or timed out (${err?.message}). Insufficient time for candidate fallback (${remainingTime}ms remaining).`);
-      throw err;
+      console.warn(`Insufficient time for candidate fallback (${remainingTime}ms remaining). Triggering algorithmic fallback.`);
+      throw new Error(`Primary (${primary}) failed: ${primaryErrMsg}`);
     }
 
-    console.warn(`Primary model "${primary}" failed (${err?.message}). Attempting fast candidate fallback with ${remainingTime}ms remaining...`);
+    console.warn(`Attempting fast candidate fallback with ${remainingTime}ms remaining...`);
     const fallbackCandidates = FALLBACK_MODEL_CANDIDATES.filter(m => m !== primary);
     const candidate = fallbackCandidates[0] || 'gemini-3.6-flash';
     
@@ -145,8 +144,9 @@ async function executeWithModelFallback<T>(
       cachedWorkingModel = candidate;
       return result;
     } catch (fallbackErr: any) {
-      console.warn(`Candidate model "${candidate}" failed (${fallbackErr?.message || fallbackErr}). Triggering algorithmic fallback.`);
-      throw fallbackErr || err;
+      const fallbackErrMsg = fallbackErr?.message || String(fallbackErr);
+      console.warn(`Candidate model "${candidate}" failed (${fallbackErrMsg}). Triggering algorithmic fallback.`);
+      throw new Error(`Primary (${primary}): ${primaryErrMsg} | Fallback (${candidate}): ${fallbackErrMsg}`);
     }
   }
 }
@@ -215,17 +215,14 @@ export async function identifyItemFromImage(
               identifiedItem: { type: SchemaType.STRING },
               category: { 
                 type: SchemaType.STRING, 
-                format: 'enum',
                 enum: ['produce', 'electronics', 'apparel', 'unknown'] 
               },
               condition: { 
                 type: SchemaType.STRING, 
-                format: 'enum',
                 enum: ['new', 'used', 'damaged', 'fresh', 'fair'] 
               },
               confidence: { 
                 type: SchemaType.STRING, 
-                format: 'enum',
                 enum: ['high', 'medium', 'low'] 
               },
               suggestedUnit: { type: SchemaType.STRING },
@@ -429,7 +426,6 @@ TASK:
               },
               confidence: {
                 type: SchemaType.STRING,
-                format: 'enum',
                 enum: ['high', 'medium', 'low']
               },
               reasoning: {
