@@ -25,17 +25,22 @@ function getGeminiClient(): GoogleGenerativeAI | null {
 // Memory cache for the discovered working model to avoid repeated queries
 let cachedWorkingModel: string | null = null;
 
-// Candidate list prioritized for performance, vision capability, and current availability
+// Default active valid model (gemini-2.5-flash is the primary current Google GenAI flagship)
+export const DEFAULT_GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+
+// Prioritized list of active, valid models for Gemini API (generateContent + Vision)
 const FALLBACK_MODEL_CANDIDATES = [
-  process.env.GEMINI_MODEL,
+  DEFAULT_GEMINI_MODEL,
   'gemini-2.5-flash',
   'gemini-2.0-flash',
-  'gemini-1.5-flash-latest',
-  'gemini-1.5-flash',
+  'gemini-2.0-flash-exp',
   'gemini-2.5-pro',
-  'gemini-1.5-pro',
+  'gemini-1.5-flash-8b',
+  'gemini-1.5-flash-002',
+  'gemini-1.5-pro-002',
+  'gemini-1.5-flash-latest',
   'gemini-pro'
-].filter(Boolean) as string[];
+].filter((m, i, arr) => m && arr.indexOf(m) === i) as string[];
 
 /**
  * Discovers available models for this specific API key via ListModels
@@ -48,7 +53,9 @@ async function resolveWorkingModels(): Promise<string[]> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (apiKey && apiKey !== 'your_gemini_api_key_here') {
     try {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`, {
+        signal: AbortSignal.timeout(4000)
+      });
       if (res.ok) {
         const data = await res.json();
         const available = (data.models || [])
