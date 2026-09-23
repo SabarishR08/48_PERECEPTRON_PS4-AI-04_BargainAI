@@ -45,21 +45,25 @@ export async function POST(req: NextRequest) {
     const { tier: derivedTier } = determineLocalityTier(locationString);
     const localityTier: LocalityTier = (location?.tier as LocalityTier) || derivedTier;
 
-    // Step 3: Check if item fits supported categories
-    // If not explicitly set and text hints exist, attempt quick match
+    // Step 3: Precise keyword matching with whole-word or specific token regex
     if (detectedCategory === 'unknown' && detectedName) {
       const lower = detectedName.toLowerCase();
-      if (['tomato', 'onion', 'potato', 'banana', 'apple', 'spinach', 'fruit', 'vegetable', 'sabzi', 'chilli', 'mango'].some(w => lower.includes(w))) {
+      // Exclude false friends like 'vegetable oil' or 'cloth bag'
+      const isProduce = /\b(tomato|tomatoes|onion|onions|potato|potatoes|banana|bananas|apple|apples|spinach|palak|sabzi|chilli|chillies|ginger|adrak|mango|mangoes)\b/i.test(lower);
+      const isElectronics = /\b(cable|charger|charging|earphone|earphones|headphone|headphones|case|cover|tempered glass|usb|type-c|adapter|neckband|otg)\b/i.test(lower);
+      const isApparel = /\b(t-shirt|tshirt|shirt|kurti|kurtis|jeans|denim|pant|pants|dupatta|socks|belt|trouser|trousers|jogger|joggers|handkerchief)\b/i.test(lower);
+
+      if (isProduce) {
         detectedCategory = 'produce';
-      } else if (['cable', 'charger', 'earphone', 'headphone', 'case', 'cover', 'glass', 'usb', 'type-c', 'adapter', 'neckband'].some(w => lower.includes(w))) {
+      } else if (isElectronics) {
         detectedCategory = 'electronics';
-      } else if (['shirt', 't-shirt', 'kurti', 'jeans', 'pant', 'dupatta', 'socks', 'belt', 'cloth', 'apparel', 'trouser'].some(w => lower.includes(w))) {
+      } else if (isApparel) {
         detectedCategory = 'apparel';
       }
     }
 
-    // If ambiguous or unsupported category
-    if (detectedCategory === 'unknown' && visionConfidence === 'low' && !itemText) {
+    // Guard: If category is unknown OR (low confidence with no recognized item match), trigger clarification
+    if (detectedCategory === 'unknown') {
       return NextResponse.json({
         success: false,
         confidence: 'low',
@@ -68,12 +72,12 @@ export async function POST(req: NextRequest) {
         identifiedItem: detectedName || 'Unrecognized Item',
         localityTier,
         location: locationString,
-        reasoning: 'The item could not be recognized as one of the 3 supported categories (Produce, Electronics Accessories, Apparel).',
-        clarificationMessage: 'Could you please specify the item name and choose from Fresh Produce, Electronics Accessories, or Basic Apparel?',
+        reasoning: 'The item could not be reliably matched to one of the 3 supported categories (Fresh Produce, Electronics Accessories, Basic Apparel).',
+        clarificationMessage: 'Could you please specify the item name and select from Fresh Produce, Electronics Accessories, or Basic Apparel?',
         negotiationTips: [
           'Verify that the item is within supported categories for fair price guidance.',
           'Try taking a clearer, well-lit photo of the item on a plain background.',
-          'Provide the specific item name in the text field.'
+          'Type the specific item name in the text box.'
         ],
         disclaimer: 'Estimate based on category pricing patterns, not live market data'
       });
@@ -81,7 +85,7 @@ export async function POST(req: NextRequest) {
 
     // Step 4: Query seeded Supabase price bands
     const { bands, source } = await queryPriceBands(
-      detectedCategory === 'unknown' ? undefined : detectedCategory,
+      detectedCategory,
       detectedName,
       localityTier
     );

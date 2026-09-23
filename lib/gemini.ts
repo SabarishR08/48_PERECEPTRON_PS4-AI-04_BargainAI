@@ -129,19 +129,20 @@ export async function generatePriceEstimate(params: {
     referenceSource
   } = params;
 
-  // Find most relevant reference band
-  const matchingBand = referenceBands[0];
-  const baselineMin = matchingBand ? matchingBand.base_min_price : 50;
-  const baselineMax = matchingBand ? matchingBand.base_max_price : 100;
-  const multiplier = matchingBand ? matchingBand.locality_multiplier : 1.0;
-  const unit = matchingBand ? matchingBand.unit : 'piece';
+  // Find the best matching reference band for the target tier
+  const tierMatchingBand = referenceBands.find(b => b.locality_tier === localityTier) || referenceBands[0];
+  const baselineMin = tierMatchingBand ? Number(tierMatchingBand.base_min_price) : 50;
+  const baselineMax = tierMatchingBand ? Number(tierMatchingBand.base_max_price) : 100;
+  const multiplier = tierMatchingBand ? Number(tierMatchingBand.locality_multiplier) : 1.0;
+  const unit = tierMatchingBand ? tierMatchingBand.unit : 'piece';
 
   const genAI = getGeminiClient();
 
   if (!genAI) {
-    // Calculated algorithmic fallback if Gemini key is not configured
-    const calcMin = Math.round(baselineMin * multiplier);
-    const calcMax = Math.round(baselineMax * multiplier);
+    // Note: In our seed schema, base_min_price and base_max_price for tier1_metro/rural
+    // are already adjusted for that specific tier, so we use them directly to prevent double-counting.
+    const calcMin = Math.round(baselineMin);
+    const calcMax = Math.round(baselineMax);
 
     return {
       success: true,
@@ -199,7 +200,7 @@ LOCALITY CONTEXT:
 - Locality Tier: "${localityTier}" (Multiplier ~${multiplier})
 
 REFERENCE PRICE BAND FROM DATABASE (${referenceSource}):
-${matchingBand ? JSON.stringify(matchingBand) : 'No exact match found; utilize category baseline heuristics.'}
+${tierMatchingBand ? JSON.stringify(tierMatchingBand) : 'No exact match found; utilize category baseline heuristics.'}
 
 TASK:
 1. Suggest a realistic fair price range [min, max] in Indian Rupees (₹) and specified unit.
