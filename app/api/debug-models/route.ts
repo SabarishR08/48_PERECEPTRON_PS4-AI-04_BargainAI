@@ -29,13 +29,35 @@ export async function GET() {
       supportedMethods: m.supportedGenerationMethods
     }));
 
+    // Test actual generation on the top models
+    const testResults: Record<string, any> = {};
+    const testModels = ['gemini-2.5-flash', 'gemini-3.6-flash', 'gemini-flash-latest'];
+
+    for (const mod of testModels) {
+      try {
+        const testRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${mod}:generateContent?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: 'Hello, reply with "OK".' }] }]
+          })
+        });
+        const resBody = await testRes.json();
+        testResults[mod] = {
+          status: testRes.status,
+          ok: testRes.ok,
+          reply: resBody?.candidates?.[0]?.content?.parts?.[0]?.text || resBody?.error?.message || resBody
+        };
+      } catch (e: any) {
+        testResults[mod] = { error: e?.message || String(e) };
+      }
+    }
+
     return NextResponse.json({
       keyPreview,
       status,
       count: availableModels.length,
-      generateContentModels: availableModels
-        .filter((m: any) => m.supportedMethods?.includes('generateContent'))
-        .map((m: any) => m.name)
+      testResults
     });
   } catch (err: any) {
     return NextResponse.json({
