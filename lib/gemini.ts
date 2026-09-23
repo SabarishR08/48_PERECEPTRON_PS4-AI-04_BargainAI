@@ -45,7 +45,7 @@ export async function identifyItemFromImage(
 
   try {
     const model = genAI.getGenerativeModel({
-      model: 'gemini-1.5-flash',
+      model: 'gemini-3.6-flash',
       generationConfig: {
         responseMimeType: 'application/json',
         responseSchema: {
@@ -212,7 +212,7 @@ TASK:
 
   try {
     const model = genAI.getGenerativeModel({
-      model: 'gemini-1.5-flash',
+      model: 'gemini-3.6-flash',
       generationConfig: {
         responseMimeType: 'application/json',
         responseSchema: {
@@ -354,7 +354,7 @@ Price trend: ${trend}
 Output strict JSON: { "insight": "<one sentence, max 30 words, explaining WHY this seasonal pattern happens>" }`;
 
   const model = genAI.getGenerativeModel({
-    model: 'gemini-1.5-flash',
+    model: 'gemini-3.6-flash',
     generationConfig: {
       responseMimeType: 'application/json',
       responseSchema: {
