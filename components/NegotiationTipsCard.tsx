@@ -1,14 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   Zap, 
   MessageSquare, 
   DoorClosed, 
   TrendingDown, 
   CheckCircle, 
-  ListChecks,
-  Compass,
-  ShieldAlert,
-  Tag
+  ListChecks, 
+  Compass, 
+  ShieldAlert, 
+  Tag,
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 import { NegotiationPlaybook } from '@/lib/types';
 
@@ -19,6 +21,37 @@ interface NegotiationTipsCardProps {
 
 export default function NegotiationTipsCard({ tips, playbook }: NegotiationTipsCardProps) {
   const isSeller = playbook?.role === 'seller';
+  const [speakingIdx, setSpeakingIdx] = useState<number | null>(null);
+
+  const handleSpeak = (phrase: string, idx: number) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      alert('Speech synthesis is not supported in this browser.');
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+    if (speakingIdx === idx) {
+      setSpeakingIdx(null);
+      return;
+    }
+
+    // Extract Hindi / vernacular text before English translation in parenthesis if present
+    const cleanText = phrase.split('(')[0].replace(/["']/g, '').trim() || phrase;
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+
+    // Try finding Hindi or Indian English voice
+    const voices = window.speechSynthesis.getVoices();
+    const hindiVoice = voices.find(v => v.lang.includes('hi') || v.lang.includes('IN'));
+    if (hindiVoice) {
+      utterance.voice = hindiVoice;
+    }
+    utterance.rate = 0.9;
+    utterance.onend = () => setSpeakingIdx(null);
+    utterance.onerror = () => setSpeakingIdx(null);
+
+    setSpeakingIdx(idx);
+    window.speechSynthesis.speak(utterance);
+  };
 
   return (
     <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200/90 space-y-6">
@@ -132,25 +165,55 @@ export default function NegotiationTipsCard({ tips, playbook }: NegotiationTipsC
         </div>
       </div>
 
-      {/* Key Spoken Phrases */}
+      {/* Key Spoken Phrases with Voice-First TTS */}
       {playbook?.keyPhrases && playbook.keyPhrases.length > 0 && (
         <div className="pt-2">
-          <h4 className="text-xs uppercase font-bold tracking-wider text-slate-400 mb-3 flex items-center gap-1.5">
-            <MessageSquare className="w-4 h-4 text-teal-600" />
-            <span>{isSeller ? 'Vendor Defense Phrases (Hindi / English)' : 'Power Phrases to Use in Hindi / Local Dialect'}</span>
-          </h4>
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-xs uppercase font-bold tracking-wider text-slate-400 flex items-center gap-1.5">
+              <MessageSquare className="w-4 h-4 text-teal-600" />
+              <span>{isSeller ? 'Vendor Defense Phrases (Hindi / English)' : 'Power Phrases to Use in Hindi / Local Dialect'}</span>
+            </h4>
+            <span className="text-[11px] text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md font-medium flex items-center gap-1">
+              <Volume2 className="w-3 h-3 text-teal-600" /> Tap speaker to listen
+            </span>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            {playbook.keyPhrases.map((phrase, idx) => (
-              <div
-                key={idx}
-                className="p-3 bg-teal-50/40 rounded-xl border border-teal-100 text-xs text-teal-950 flex items-start gap-2"
-              >
-                <span className="w-4 h-4 rounded-full bg-teal-200 text-teal-800 flex items-center justify-center shrink-0 font-bold text-[10px]">
-                  {idx + 1}
-                </span>
-                <span className="italic">{phrase}</span>
-              </div>
-            ))}
+            {playbook.keyPhrases.map((phrase, idx) => {
+              const isPlaying = speakingIdx === idx;
+              return (
+                <div
+                  key={idx}
+                  className={`p-3 rounded-xl border text-xs flex items-start justify-between gap-2.5 transition-all ${
+                    isPlaying 
+                      ? 'bg-teal-100/80 border-teal-300 ring-2 ring-teal-500/20 shadow-xs' 
+                      : 'bg-teal-50/40 border-teal-100 text-teal-950 hover:bg-teal-50/80'
+                  }`}
+                >
+                  <div className="flex items-start gap-2 flex-1">
+                    <span className="w-4 h-4 rounded-full bg-teal-200 text-teal-800 flex items-center justify-center shrink-0 font-bold text-[10px] mt-0.5">
+                      {idx + 1}
+                    </span>
+                    <span className="italic leading-relaxed">{phrase}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleSpeak(phrase, idx)}
+                    title={isPlaying ? 'Stop speaking' : 'Listen to phrase'}
+                    className={`p-1.5 rounded-lg shrink-0 transition-colors ${
+                      isPlaying 
+                        ? 'bg-teal-700 text-white animate-pulse' 
+                        : 'bg-teal-200/60 hover:bg-teal-300 text-teal-800'
+                    }`}
+                  >
+                    {isPlaying ? (
+                      <VolumeX className="w-3.5 h-3.5" />
+                    ) : (
+                      <Volume2 className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
