@@ -133,11 +133,12 @@ export function determineLocalityTier(cityOrLocality: string): { tier: LocalityT
   const input = cityOrLocality.toLowerCase().trim();
   
   const tier1Metros = [
-    'mumbai', 'delhi', 'bangalore', 'bengaluru', 'hyderabad', 'chennai', 
-    'kolkata', 'pune', 'ahmedabad', 'gurugram', 'gurgaon', 'noida'
+    'mumbai', 'delhi', 'new delhi', 'bangalore', 'bengaluru', 'hyderabad', 'chennai', 
+    'kolkata', 'pune', 'ahmedabad', 'gurugram', 'gurgaon', 'noida', 'navi mumbai', 
+    'thane', 'ncr', 'faridabad', 'ghaziabad'
   ];
 
-  const ruralKeywords = ['village', 'gram', 'rural', 'taluk', 'tehsil', 'basti', 'dehat'];
+  const ruralKeywords = ['village', 'gram', 'rural', 'taluk', 'tehsil', 'basti', 'dehat', 'haat', 'gaon', 'khet'];
 
   if (tier1Metros.some(m => input.includes(m))) {
     return { tier: 'tier1_metro', multiplier: 1.25 };

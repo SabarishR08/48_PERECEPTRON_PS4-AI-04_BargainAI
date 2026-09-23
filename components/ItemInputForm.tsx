@@ -36,12 +36,33 @@ const CATEGORIES: { id: ItemCategory; label: string; icon: any }[] = [
 ];
 
 const PRESET_LOCATIONS: { label: string; city: string; locality: string; tier: LocalityTier }[] = [
+  // Tier 1 — Metro mandis
   { label: 'Delhi - Sarojini Nagar / Chandni Chowk (Tier 1)', city: 'Delhi', locality: 'Sarojini Nagar', tier: 'tier1_metro' },
-  { label: 'Mumbai - Colaba / Crawford Market (Tier 1)', city: 'Mumbai', locality: 'Crawford Market', tier: 'tier1_metro' },
+  { label: 'Delhi - Azadpur Mandi (Largest Produce Mandi) (Tier 1)', city: 'Delhi', locality: 'Azadpur Mandi', tier: 'tier1_metro' },
+  { label: 'Mumbai - Crawford Market / Colaba (Tier 1)', city: 'Mumbai', locality: 'Crawford Market', tier: 'tier1_metro' },
+  { label: 'Mumbai - Dadar Market (Tier 1)', city: 'Mumbai', locality: 'Dadar', tier: 'tier1_metro' },
   { label: 'Bangalore - KR Market / Commercial Street (Tier 1)', city: 'Bangalore', locality: 'KR Market', tier: 'tier1_metro' },
+  { label: 'Chennai - Koyambedu Wholesale Market (Tier 1)', city: 'Chennai', locality: 'Koyambedu', tier: 'tier1_metro' },
+  { label: 'Kolkata - New Market / Gariahat (Tier 1)', city: 'Kolkata', locality: 'Gariahat', tier: 'tier1_metro' },
+  { label: 'Hyderabad - Begum Bazaar (Tier 1)', city: 'Hyderabad', locality: 'Begum Bazaar', tier: 'tier1_metro' },
+  { label: 'Pune - Mandai / Laxmi Road (Tier 1)', city: 'Pune', locality: 'Mandai', tier: 'tier1_metro' },
+  { label: 'Ahmedabad - Manek Chowk (Tier 1)', city: 'Ahmedabad', locality: 'Manek Chowk', tier: 'tier1_metro' },
+
+  // Tier 2 — City bazaars
   { label: 'Jaipur - Bapu Bazaar (Tier 2)', city: 'Jaipur', locality: 'Bapu Bazaar', tier: 'tier2_city' },
   { label: 'Lucknow - Aminabad (Tier 2)', city: 'Lucknow', locality: 'Aminabad', tier: 'tier2_city' },
-  { label: 'Rural Mandi / Tehsil Market', city: 'Sonipat', locality: 'Rural Mandi', tier: 'rural' },
+  { label: 'Indore - Sarafa Bazaar (Tier 2)', city: 'Indore', locality: 'Sarafa Bazaar', tier: 'tier2_city' },
+  { label: 'Coimbatore - Town Hall Market (Tier 2)', city: 'Coimbatore', locality: 'Town Hall', tier: 'tier2_city' },
+  { label: 'Patna - Hathwa Market (Tier 2)', city: 'Patna', locality: 'Hathwa Market', tier: 'tier2_city' },
+  { label: 'Bhopal - Chowk Bazaar (Tier 2)', city: 'Bhopal', locality: 'Chowk', tier: 'tier2_city' },
+  { label: 'Kochi - Broadway Market (Tier 2)', city: 'Kochi', locality: 'Broadway', tier: 'tier2_city' },
+  { label: 'Varanasi - Godowlia Market (Tier 2)', city: 'Varanasi', locality: 'Godowlia', tier: 'tier2_city' },
+
+  // Rural — Mandis & weekly haats
+  { label: 'Haryana - Sonipat Rural Mandi', city: 'Sonipat', locality: 'Rural Mandi', tier: 'rural' },
+  { label: 'UP - Weekly Village Haat (Dehat)', city: 'Barabanki', locality: 'Village Haat', tier: 'rural' },
+  { label: 'Maharashtra - Taluka Market (Rural)', city: 'Nashik Rural', locality: 'Taluk Market', tier: 'rural' },
+  { label: 'MP - Gram Haat (Rural)', city: 'Vidisha', locality: 'Gram Haat', tier: 'rural' },
 ];
 
 export default function ItemInputForm({ onSubmit, isLoading }: ItemInputFormProps) {

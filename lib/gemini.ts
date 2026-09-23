@@ -29,7 +29,7 @@ export async function identifyItemFromImage(
 
   if (!genAI) {
     return {
-      identifiedItem: 'Produce / Accessory / Apparel (API Key Pending)',
+      identifiedItem: 'Unidentified Item (API Key Pending)',
       category: 'unknown',
       condition: 'fair',
       confidence: 'low',
