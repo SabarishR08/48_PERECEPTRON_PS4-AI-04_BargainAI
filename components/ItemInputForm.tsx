@@ -80,7 +80,9 @@ export default function ItemInputForm({ onSubmit, isLoading }: ItemInputFormProp
 
   const handleVisionAnalysisComplete = (result: VisionIdentificationResult) => {
     setVisionData(result);
-    if (result.identifiedItem && !result.identifiedItem.toLowerCase().includes('unrecognized') && !result.identifiedItem.toLowerCase().includes('unidentified')) {
+    const lower = (result.identifiedItem || '').toLowerCase();
+    const isUnknown = lower.includes('unrecognized') || lower.includes('unidentified') || lower.includes('unknown');
+    if (result.identifiedItem && !isUnknown) {
       setItemText(result.identifiedItem);
     }
     if (result.category && result.category !== 'unknown') {
@@ -90,7 +92,10 @@ export default function ItemInputForm({ onSubmit, isLoading }: ItemInputFormProp
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const effectiveText = itemText.trim() || (visionData?.identifiedItem && !visionData.identifiedItem.toLowerCase().includes('unrecognized') && !visionData.identifiedItem.toLowerCase().includes('unidentified') ? visionData.identifiedItem : '');
+    const visionItem = visionData?.identifiedItem || '';
+    const visionLower = visionItem.toLowerCase();
+    const visionIsUnknown = visionLower.includes('unrecognized') || visionLower.includes('unidentified') || visionLower.includes('unknown');
+    const effectiveText = itemText.trim() || (!visionIsUnknown ? visionItem : '');
 
     if (!effectiveText && !photoBase64) {
       alert('Please enter an item name or take a photo.');
