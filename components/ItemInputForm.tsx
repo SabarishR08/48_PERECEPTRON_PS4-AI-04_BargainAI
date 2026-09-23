@@ -98,12 +98,12 @@ export default function ItemInputForm({ onSubmit, isLoading }: ItemInputFormProp
   };
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200/80">
+    <form onSubmit={handleSubmit} className="bg-[#151517] rounded-3xl p-6 sm:p-8 border border-[#2A2A2D]">
       <div className="space-y-6">
         
         {/* Step 1: Photo Upload */}
         <div>
-          <label className="block text-sm font-semibold text-slate-800 mb-2">
+          <label className="block text-sm font-semibold text-[#E8E8EA] mb-2">
             1. Photo of the Item (Optional but Recommended)
           </label>
           <ImageUploader
@@ -111,12 +111,12 @@ export default function ItemInputForm({ onSubmit, isLoading }: ItemInputFormProp
             onAnalysisComplete={handleVisionAnalysisComplete}
           />
           {visionData && (
-            <div className="mt-3 p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-xs text-emerald-900 flex items-start gap-2">
-              <Sparkles className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+            <div className="mt-3 p-3 bg-[#4ADE80]/10 rounded-xl border border-[#4ADE80]/25 text-xs text-[#4ADE80] flex items-start gap-2">
+              <Sparkles className="w-4 h-4 text-[#4ADE80] shrink-0 mt-0.5" />
               <div>
-                <span className="font-semibold">Gemini Vision Detected: </span>
-                {visionData.identifiedItem} (Category: {visionData.category}, Condition: {visionData.condition}).
-                <p className="mt-0.5 text-emerald-700 italic">{visionData.visualObservations}</p>
+                <span className="font-semibold text-[#E8E8EA]">Gemini Vision Detected: </span>
+                <span className="text-[#E8E8EA]">{visionData.identifiedItem} (Category: {visionData.category}, Condition: {visionData.condition}).</span>
+                <p className="mt-0.5 text-[#4ADE80]/80 italic">{visionData.visualObservations}</p>
               </div>
             </div>
           )}
@@ -125,13 +125,13 @@ export default function ItemInputForm({ onSubmit, isLoading }: ItemInputFormProp
         {/* Step 2: Item Name & Description */}
         <div>
           <div className="flex items-center justify-between mb-2">
-            <label className="text-sm font-semibold text-slate-800">
+            <label className="text-sm font-semibold text-[#E8E8EA]">
               2. Describe the Item
             </label>
-            <span className="text-xs text-slate-400">e.g., condition, quantity</span>
+            <span className="text-xs text-[#9A9A9E]">e.g., condition, quantity</span>
           </div>
           <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#9A9A9E]">
               <Search className="w-4 h-4" />
             </div>
             <input
@@ -139,31 +139,31 @@ export default function ItemInputForm({ onSubmit, isLoading }: ItemInputFormProp
               value={itemText}
               onChange={(e) => setItemText(e.target.value)}
               placeholder="e.g. 1kg Fresh Country Tomatoes, or Type-C 20W Fast Cable, or Plain Crewneck T-Shirt"
-              className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all text-slate-900"
+              className="w-full pl-10 pr-4 py-3 bg-[#0D0D0F] border border-[#2A2A2D] rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-[#C0C0C6] focus:bg-[#1C1C1F] transition-all text-[#E8E8EA] placeholder:text-[#9A9A9E]/60"
             />
           </div>
 
           {/* Quick Item Samples */}
-          <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
-            <span className="font-medium text-slate-400">Popular:</span>
+          <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-xs text-[#9A9A9E]">
+            <span className="font-medium text-[#9A9A9E]">Popular:</span>
             <button
               type="button"
               onClick={() => handleSampleSelect('1 kg Red Country Tomatoes', 'produce')}
-              className="px-2.5 py-1 bg-slate-100 hover:bg-emerald-100 hover:text-emerald-800 rounded-lg transition-colors"
+              className="px-2.5 py-1 bg-[#2A2A2D] hover:bg-[#C0C0C6] hover:text-[#0A0A0B] text-[#C0C0C6] rounded-lg transition-colors"
             >
               🍅 Tomatoes (1kg)
             </button>
             <button
               type="button"
               onClick={() => handleSampleSelect('Braided Type-C Fast Charging Cable', 'electronics')}
-              className="px-2.5 py-1 bg-slate-100 hover:bg-emerald-100 hover:text-emerald-800 rounded-lg transition-colors"
+              className="px-2.5 py-1 bg-[#2A2A2D] hover:bg-[#C0C0C6] hover:text-[#0A0A0B] text-[#C0C0C6] rounded-lg transition-colors"
             >
               🔌 Type-C Cable
             </button>
             <button
               type="button"
               onClick={() => handleSampleSelect('Men Cotton Crewneck T-Shirt', 'apparel')}
-              className="px-2.5 py-1 bg-slate-100 hover:bg-emerald-100 hover:text-emerald-800 rounded-lg transition-colors"
+              className="px-2.5 py-1 bg-[#2A2A2D] hover:bg-[#C0C0C6] hover:text-[#0A0A0B] text-[#C0C0C6] rounded-lg transition-colors"
             >
               👕 Cotton T-Shirt
             </button>
@@ -172,7 +172,7 @@ export default function ItemInputForm({ onSubmit, isLoading }: ItemInputFormProp
 
         {/* Step 3: Category Selector (3 MVP categories) */}
         <div>
-          <label className="block text-sm font-semibold text-slate-800 mb-2">
+          <label className="block text-sm font-semibold text-[#E8E8EA] mb-2">
             3. Market Category (Scope limited to 3)
           </label>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
@@ -186,11 +186,11 @@ export default function ItemInputForm({ onSubmit, isLoading }: ItemInputFormProp
                   onClick={() => setSelectedCategory(cat.id)}
                   className={`flex items-center gap-2.5 p-3 rounded-xl border text-xs font-semibold transition-all ${
                     isSelected
-                      ? 'border-emerald-600 bg-emerald-50 text-emerald-900 ring-2 ring-emerald-500/20 shadow-xs'
-                      : 'border-slate-200 bg-slate-50/50 hover:bg-slate-100 text-slate-700'
+                      ? 'border-[#C0C0C6] bg-[#C0C0C6]/10 text-[#C0C0C6] ring-1 ring-[#C0C0C6]/20'
+                      : 'border-[#2A2A2D] bg-[#0D0D0F] hover:bg-[#1C1C1F] text-[#9A9A9E]'
                   }`}
                 >
-                  <div className={`p-1.5 rounded-lg ${isSelected ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                  <div className={`p-1.5 rounded-lg ${isSelected ? 'bg-[#C0C0C6] text-[#0A0A0B]' : 'bg-[#2A2A2D] text-[#9A9A9E]'}`}>
                     <Icon className="w-4 h-4" />
                   </div>
                   <span>{cat.label}</span>
@@ -203,14 +203,14 @@ export default function ItemInputForm({ onSubmit, isLoading }: ItemInputFormProp
         {/* Step 4: Location & Market Setting */}
         <div>
           <div className="flex items-center justify-between mb-2">
-            <label className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
-              <MapPin className="w-4 h-4 text-emerald-600" />
+            <label className="text-sm font-semibold text-[#E8E8EA] flex items-center gap-1.5">
+              <MapPin className="w-4 h-4 text-[#C0C0C6]" />
               <span>4. Market Location & Locality Tier</span>
             </label>
             <button
               type="button"
               onClick={() => setIsCustomLocation(!isCustomLocation)}
-              className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 hover:underline"
+              className="text-xs font-semibold text-[#C0C0C6] hover:text-[#E8E8EA] hover:underline"
             >
               {isCustomLocation ? 'Use Preset Mandis' : 'Enter Custom Locality'}
             </button>
@@ -223,7 +223,7 @@ export default function ItemInputForm({ onSubmit, isLoading }: ItemInputFormProp
                 const found = PRESET_LOCATIONS.find((loc) => loc.label === e.target.value);
                 if (found) setSelectedLocation(found);
               }}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900"
+              className="w-full px-4 py-3 bg-[#0D0D0F] border border-[#2A2A2D] rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-[#C0C0C6] text-[#E8E8EA]"
             >
               {PRESET_LOCATIONS.map((loc) => (
                 <option key={loc.label} value={loc.label}>
@@ -238,21 +238,21 @@ export default function ItemInputForm({ onSubmit, isLoading }: ItemInputFormProp
                 value={customCity}
                 onChange={(e) => setCustomCity(e.target.value)}
                 placeholder="City (e.g. Pune, Patna)"
-                className="px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500 text-slate-900"
+                className="px-3.5 py-2.5 bg-[#0D0D0F] border border-[#2A2A2D] rounded-xl text-xs focus:ring-1 focus:ring-[#C0C0C6] text-[#E8E8EA] placeholder:text-[#9A9A9E]/60"
               />
               <input
                 type="text"
                 value={customLocality}
                 onChange={(e) => setCustomLocality(e.target.value)}
-                placeholder="Market / Locality (e.g. Weekly Haat)"
-                className="px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500 text-slate-900"
+                placeholder="Market (e.g. Haat)"
+                className="px-3.5 py-2.5 bg-[#0D0D0F] border border-[#2A2A2D] rounded-xl text-xs focus:ring-1 focus:ring-[#C0C0C6] text-[#E8E8EA] placeholder:text-[#9A9A9E]/60"
               />
               <select
                 value={customTier}
                 onChange={(e) => setCustomTier(e.target.value as LocalityTier)}
-                className="px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500 text-slate-900"
+                className="px-3 py-2.5 bg-[#0D0D0F] border border-[#2A2A2D] rounded-xl text-xs focus:ring-1 focus:ring-[#C0C0C6] text-[#E8E8EA]"
               >
-                <option value="tier1_metro">Tier-1 Metro (+25% rent/transport)</option>
+                <option value="tier1_metro">Tier-1 Metro (+25% rent)</option>
                 <option value="tier2_city">Tier-2 City (Base 1.0x)</option>
                 <option value="rural">Rural / Village Mandi (0.8x)</option>
               </select>
@@ -264,7 +264,7 @@ export default function ItemInputForm({ onSubmit, isLoading }: ItemInputFormProp
         <button
           type="submit"
           disabled={isLoading || (!itemText && !photoBase64)}
-          className="w-full py-4 px-6 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 disabled:opacity-50 text-white font-semibold rounded-2xl shadow-lg shadow-emerald-700/20 flex items-center justify-center gap-2.5 transition-all duration-200 transform active:scale-[0.99]"
+          className="w-full py-4 px-6 bg-[#E8E8EA] hover:bg-[#C0C0C6] disabled:opacity-50 text-[#0A0A0B] font-semibold rounded-2xl flex items-center justify-center gap-2.5 transition-all duration-200 transform active:scale-[0.99]"
         >
           {isLoading ? (
             <>
@@ -273,13 +273,13 @@ export default function ItemInputForm({ onSubmit, isLoading }: ItemInputFormProp
             </>
           ) : (
             <>
-              <Sparkles className="w-5 h-5 text-emerald-200" />
+              <Sparkles className="w-5 h-5 text-[#0A0A0B]/70" />
               <span>Get Fair Price & Negotiation Playbook</span>
             </>
           )}
         </button>
 
-        <div className="flex items-center justify-center gap-1.5 text-xs text-slate-400 text-center">
+        <div className="flex items-center justify-center gap-1.5 text-xs text-[#9A9A9E] text-center">
           <Info className="w-3.5 h-3.5 shrink-0" />
           <span>Responses combine Supabase price bands + Gemini 2.5 reasoning</span>
         </div>

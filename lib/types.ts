@@ -6,6 +6,10 @@ export type ItemCondition = 'new' | 'used' | 'damaged' | 'fresh' | 'fair';
 
 export type ConfidenceLevel = 'high' | 'medium' | 'low';
 
+export type QualityGrade = 'excellent' | 'good' | 'fair' | 'poor';
+
+export type TrendDirection = 'rising' | 'falling' | 'stable';
+
 export interface PriceBand {
   id?: string;
   category: ItemCategory;
@@ -72,4 +76,34 @@ export interface EstimateRequest {
     tier?: LocalityTier;
   };
   categoryHint?: ItemCategory;
+}
+
+// ── Seasonal Report types ────────────────────────────────────────────────────
+
+export interface SeasonalHistoryPoint {
+  period: string;           // e.g. "Jan", "Summer", "Monsoon"
+  monthIndex: number;       // 0-11 for months; 0-3 for seasons (for sorting/charting)
+  avgPrice: number;
+  qualityGrade: QualityGrade;
+  sampleSize: number;
+}
+
+export interface QualityBreakdown {
+  grade: QualityGrade;
+  multiplier: number;
+  estimatedPrice: number;
+}
+
+export interface SeasonalReport {
+  itemName: string;
+  category: ItemCategory;
+  localityTier: LocalityTier;
+  year: number;
+  history: SeasonalHistoryPoint[];       // full year, one dominant quality grade per period
+  currentSeasonPrice: { period: string; avgPrice: number };
+  qualityBreakdown: QualityBreakdown[];  // 4 rows for current baseline
+  trend: TrendDirection;
+  bestTimeToBuy: { period: string; avgPrice: number };
+  insight: string;                        // Gemini-generated one-liner
+  dataSource: 'supabase' | 'seeded_baseline';
 }
