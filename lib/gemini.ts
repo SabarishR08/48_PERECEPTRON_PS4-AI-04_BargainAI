@@ -32,19 +32,20 @@ const DEPRECATED_MODELS = new Set([
   'gemini-2.0-flash', 
   'gemini-2.0-flash-exp',
   'gemini-2.5-flash', 
+  'gemini-2.5-flash-lite',
   'gemini-3.0-flash'
 ]);
 
 const envModel = process.env.GEMINI_MODEL;
-// Default active valid model (gemini-3.6-flash is recommended and confirmed active by Google GenAI)
-export const DEFAULT_GEMINI_MODEL = (envModel && !DEPRECATED_MODELS.has(envModel)) ? envModel : 'gemini-3.6-flash';
+// Default active valid model (gemini-3.5-flash-lite is the active low-latency model recommended by Google)
+export const DEFAULT_GEMINI_MODEL = (envModel && !DEPRECATED_MODELS.has(envModel)) ? envModel : 'gemini-3.5-flash-lite';
 
 // Prioritized list of active, valid models for Gemini API (generateContent + Vision)
 const FALLBACK_MODEL_CANDIDATES = [
   DEFAULT_GEMINI_MODEL,
-  'gemini-3.6-flash',
-  'gemini-2.5-flash-lite',
+  'gemini-3.5-flash-lite',
   'gemini-3.5-flash',
+  'gemini-3.6-flash',
   'gemini-3.7-flash',
   'gemini-2.5-pro'
 ].filter((m, i, arr) => m && !DEPRECATED_MODELS.has(m) && arr.indexOf(m) === i) as string[];
