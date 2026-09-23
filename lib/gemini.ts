@@ -25,20 +25,18 @@ function getGeminiClient(): GoogleGenerativeAI | null {
 // Memory cache for the discovered working model to avoid repeated queries
 let cachedWorkingModel: string | null = null;
 
-// Default active valid model (gemini-2.5-flash is the primary current Google GenAI flagship)
-export const DEFAULT_GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+// Default active valid model (gemini-3.6-flash is recommended by Google GenAI)
+export const DEFAULT_GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
 
 // Prioritized list of active, valid models for Gemini API (generateContent + Vision)
 const FALLBACK_MODEL_CANDIDATES = [
   DEFAULT_GEMINI_MODEL,
+  'gemini-3.6-flash',
+  'gemini-3.0-flash',
   'gemini-2.5-flash',
-  'gemini-2.0-flash',
-  'gemini-2.0-flash-exp',
   'gemini-2.5-pro',
-  'gemini-1.5-flash-8b',
-  'gemini-1.5-flash-002',
-  'gemini-1.5-pro-002',
-  'gemini-1.5-flash-latest',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash',
   'gemini-pro'
 ].filter((m, i, arr) => m && arr.indexOf(m) === i) as string[];
 
@@ -54,7 +52,7 @@ async function resolveWorkingModels(): Promise<string[]> {
   if (apiKey && apiKey !== 'your_gemini_api_key_here') {
     try {
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`, {
-        signal: AbortSignal.timeout(4000)
+        signal: AbortSignal.timeout(2500)
       });
       if (res.ok) {
         const data = await res.json();
@@ -66,12 +64,15 @@ async function resolveWorkingModels(): Promise<string[]> {
         for (const candidate of FALLBACK_MODEL_CANDIDATES) {
           if (available.includes(candidate)) {
             cachedWorkingModel = candidate;
+            console.log(`Discovered active matching Gemini model: ${candidate}`);
             return [candidate, ...available.filter((m: string) => m !== candidate)];
           }
         }
         if (available.length > 0) {
-          cachedWorkingModel = available[0];
-          return available;
+          const flash = available.find((m: string) => m.includes('flash'));
+          cachedWorkingModel = flash || available[0];
+          console.log(`Selected available Gemini model: ${cachedWorkingModel}`);
+          return [cachedWorkingModel, ...available.filter((m: string) => m !== cachedWorkingModel)];
         }
       }
     } catch (e) {
@@ -105,7 +106,11 @@ async function executeWithModelFallback<T>(
   totalTimeoutMs: number = 7000
 ): Promise<T> {
   const deadline = Date.now() + totalTimeoutMs;
-  const primary = cachedWorkingModel || DEFAULT_GEMINI_MODEL;
+  let primary = cachedWorkingModel;
+  if (!primary) {
+    const models = await resolveWorkingModels();
+    primary = models[0] || DEFAULT_GEMINI_MODEL;
+  }
 
   const primaryBudget = Math.min(totalTimeoutMs, Math.max(1500, deadline - Date.now()));
   try {
@@ -122,7 +127,7 @@ async function executeWithModelFallback<T>(
 
     console.warn(`Primary model "${primary}" failed (${err?.message}). Attempting fast candidate fallback with ${remainingTime}ms remaining...`);
     const fallbackCandidates = FALLBACK_MODEL_CANDIDATES.filter(m => m !== primary);
-    const candidate = fallbackCandidates[0] || 'gemini-2.0-flash';
+    const candidate = fallbackCandidates[0] || 'gemini-3.6-flash';
     
     try {
       const result = await withTimeout(operation(candidate), remainingTime - 400, `Fallback model (${candidate})`);
